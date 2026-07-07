@@ -3,6 +3,9 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
+  // Served from https://the-buy-admin.github.io/the-buy/ (a GitHub Pages
+  // project site), so every asset path needs this subpath prefix.
+  base: "/the-buy/",
   plugins: [
     react(),
     VitePWA({
