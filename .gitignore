@@ -4,3 +4,8 @@ dev-dist/
 .DS_Store
 *.local
 .claude/
+
+# Contains confidential business data (wholesale prices, IPC amounts, etc.)
+# — never commit to this public repo.
+the-buy-backup-*.json
+

@@ -2166,7 +2166,7 @@ function Style() {
       .bbp-splash {
         width: 100%; min-height: 640px; display: flex; flex-direction: column;
         align-items: center; justify-content: center; gap: 18px; background: var(--bg);
-        animation: bbp-splash-in 0.4s ease-out;
+        animation: bbp-splash-in 2s ease-out;
       }
       .bbp-splash-eyebrow {
         font-family: var(--font-sans); font-size: 10px; letter-spacing: 0.32em; font-weight: 400;
