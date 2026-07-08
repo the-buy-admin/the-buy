@@ -393,7 +393,7 @@ export default function App() {
   const [entries, setEntries] = useState(null);
   const [orders, setOrders] = useState(null);
   const [launchPlan, setLaunchPlan] = useState(null);
-  const [tab, setTab] = useState("table");
+  const [tab, setTab] = useState("home");
   const [seasonId, setSeasonId] = useState(null);
   const [showInactive, setShowInactive] = useState(false);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved
@@ -465,7 +465,7 @@ export default function App() {
       setOrders(o);
       setLaunchPlan(lp);
       const sorted = sortSeasons(m.seasons);
-      setSeasonId(sorted[sorted.length - 3] ? sorted[sorted.length - 3].id : sorted[0]?.id);
+      setSeasonId(sorted[sorted.length - 1]?.id ?? null);
     })().catch(() => setLoadError(true));
   }, []);
 
@@ -732,7 +732,7 @@ export default function App() {
     <div className="bbp-root">
       <Style />
       <aside className="bbp-side">
-        <div className="bbp-brandmark">
+        <div className="bbp-brandmark" role="button" tabIndex={0} onClick={() => setTab("home")} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setTab("home"); }}>
           <div className="bbp-brandmark-eyebrow">T.O</div>
           <div className="bbp-brandmark-title">THE BUY</div>
         </div>
@@ -769,6 +769,7 @@ export default function App() {
       </aside>
 
       <main className="bbp-main">
+        {tab === "home" && <Splash />}
         {tab === "table" && (
           <TablePane
             sortedSeasons={sortedSeasons}
@@ -2209,7 +2210,7 @@ function Style() {
         padding: 36px 28px;
         border-right: 1px solid var(--line);
       }
-      .bbp-brandmark { margin-bottom: 56px; }
+      .bbp-brandmark { margin-bottom: 56px; cursor: pointer; }
       .bbp-brandmark-eyebrow {
         font-size: 10px; letter-spacing: 0.22em;
         text-transform: uppercase; color: var(--ink-soft); margin-bottom: 10px; font-weight: 400;
