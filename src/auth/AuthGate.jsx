@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { login } from "../lib/storage.js";
+import { primeAudio, scheduleUnlockClick } from "../lib/audio.js";
+import { SPLASH_CLICK_MS } from "../lib/splashTiming.js";
 
 const STYLES = {
   page: {
@@ -66,11 +68,15 @@ export default function AuthGate({ children }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!password || busy) return;
+    // Must happen synchronously inside this click/submit gesture, or the
+    // browser will silently block audio from starting later.
+    primeAudio();
     setBusy(true);
     setError("");
     try {
       const result = await login(password);
       if (result.firstTimeSetup) setFirstTime(true);
+      scheduleUnlockClick(SPLASH_CLICK_MS / 1000);
       setUnlocked(true);
     } catch (err) {
       setError(messageFor(err));

@@ -4,6 +4,7 @@ import {
   Tooltip, Legend, BarChart, Cell,
 } from "recharts";
 import * as XLSX from "xlsx";
+import { SPLASH_MIN_MS } from "./lib/splashTiming.js";
 
 /* ------------------------------------------------------------------ */
 /* Constants & helpers                                                 */
@@ -373,37 +374,7 @@ function Modal({ modal, onClose }) {
   );
 }
 
-// Short synthesized "click" (like a key/latch unlocking) - two quick tone
-// bursts, no external audio file needed.
-function playUnlockSound() {
-  try {
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    const ctx = new Ctx();
-    const now = ctx.currentTime;
-    const click = (time, freq, duration, gain) => {
-      const osc = ctx.createOscillator();
-      const g = ctx.createGain();
-      osc.type = "square";
-      osc.frequency.setValueAtTime(freq, time);
-      g.gain.setValueAtTime(0, time);
-      g.gain.linearRampToValueAtTime(gain, time + 0.002);
-      g.gain.exponentialRampToValueAtTime(0.0001, time + duration);
-      osc.connect(g);
-      g.connect(ctx.destination);
-      osc.start(time);
-      osc.stop(time + duration + 0.01);
-    };
-    click(now, 1800, 0.03, 0.25);
-    click(now + 0.045, 900, 0.05, 0.18);
-    setTimeout(() => ctx.close(), 300);
-  } catch (err) { /* audio unavailable/blocked; splash still shows fine */ }
-}
-
 function Splash() {
-  useEffect(() => {
-    const t = setTimeout(playUnlockSound, 2000);
-    return () => clearTimeout(t);
-  }, []);
   return (
     <div className="bbp-splash">
       <div className="bbp-splash-eyebrow">T.O</div>
@@ -429,9 +400,17 @@ export default function App() {
   const [loadError, setLoadError] = useState(false);
   const [importMsg, setImportMsg] = useState("");
   const [modal, setModal] = useState(null);
+  const [minSplashDone, setMinSplashDone] = useState(false);
   const saveTimer = useRef(null);
   const firstLoad = useRef(true);
   const fileInputRef = useRef(null);
+
+  // Keeps the splash (with its fade-in + unlock click) on screen for a fixed
+  // minimum duration, regardless of how fast data actually loads.
+  useEffect(() => {
+    const t = setTimeout(() => setMinSplashDone(true), SPLASH_MIN_MS);
+    return () => clearTimeout(t);
+  }, []);
 
   /* ---- load ---- */
   useEffect(() => {
@@ -740,7 +719,7 @@ export default function App() {
   if (loadError) {
     return <div className="bbp-root"><div className="bbp-error">Failed to load data. Please reload the page.</div></div>;
   }
-  if (!masters || !entries || !orders || !launchPlan) {
+  if (!masters || !entries || !orders || !launchPlan || !minSplashDone) {
     return (
       <div className="bbp-root">
         <Style />
@@ -2202,7 +2181,7 @@ function Style() {
       .bbp-splash {
         width: 100%; min-height: 640px; display: flex; flex-direction: column;
         align-items: center; justify-content: center; gap: 18px; background: var(--bg);
-        animation: bbp-splash-in 3s ease-out;
+        animation: bbp-splash-in ${SPLASH_MIN_MS}ms ease-out;
       }
       .bbp-splash-eyebrow {
         font-family: var(--font-sans); font-size: 10px; letter-spacing: 0.32em; font-weight: 400;
