@@ -12,7 +12,14 @@ function loadBuffer() {
     const url = `${import.meta.env.BASE_URL}sounds/unlock-click.mp3`;
     bufferPromise = fetch(url)
       .then((res) => res.arrayBuffer())
-      .then((data) => ctx.decodeAudioData(data));
+      .then((data) => ctx.decodeAudioData(data))
+      .catch((err) => {
+        // Don't cache a failure - a transient network/decode hiccup on one
+        // attempt would otherwise silence every later attempt in this
+        // session too.
+        bufferPromise = null;
+        throw err;
+      });
   }
   return bufferPromise;
 }
@@ -30,12 +37,14 @@ export function primeAudio() {
 
 export function scheduleUnlockClick(delaySeconds) {
   if (!ctx) return;
+  const targetTime = ctx.currentTime + delaySeconds;
   loadBuffer()
     .then((buffer) => {
       const src = ctx.createBufferSource();
       src.buffer = buffer;
       src.connect(ctx.destination);
-      src.start(ctx.currentTime + delaySeconds);
+      // Clamp to "now" in case decoding took longer than the intended delay.
+      src.start(Math.max(ctx.currentTime, targetTime));
     })
     .catch(() => { /* audio unavailable/blocked; splash still shows fine */ });
 }
