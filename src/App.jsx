@@ -374,9 +374,9 @@ function Modal({ modal, onClose }) {
   );
 }
 
-function Splash() {
+function Splash({ noFade = false }) {
   return (
-    <div className="bbp-splash">
+    <div className={`bbp-splash${noFade ? " bbp-splash--nofade" : ""}`}>
       <div className="bbp-splash-eyebrow">T.O</div>
       <div className="bbp-splash-title">THE BUY</div>
       <div className="bbp-splash-bar"><div className="bbp-splash-bar-fill" /></div>
@@ -769,7 +769,7 @@ export default function App() {
       </aside>
 
       <main className="bbp-main">
-        {tab === "home" && <Splash />}
+        {tab === "home" && <Splash noFade />}
         {tab === "table" && (
           <TablePane
             sortedSeasons={sortedSeasons}
@@ -2184,6 +2184,7 @@ function Style() {
         align-items: center; justify-content: center; gap: 18px; background: var(--bg);
         animation: bbp-splash-in ${SPLASH_MIN_MS}ms ease-out;
       }
+      .bbp-splash--nofade { animation: none; }
       .bbp-splash-eyebrow {
         font-family: var(--font-sans); font-size: 10px; letter-spacing: 0.32em; font-weight: 400;
         color: var(--ink-soft);
