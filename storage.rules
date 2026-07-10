@@ -1,0 +1,12 @@
+rules_version = '2';
+
+// Order photos live under order-images/. Same access model as the Realtime
+// Database: only the logged-in shared account (Firebase Authentication) can
+// read or write - nothing is publicly accessible.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /order-images/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
