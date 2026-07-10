@@ -5,19 +5,23 @@
 // shared login password). Run once, then it can be deleted/ignored.
 //
 // Usage:
-//   node scripts/import-backup.mjs the-buy-backup-2026-07-07.json
+//   node scripts/import-backup.mjs the-buy-backup-2026-07-08.json
 //
-// Note: order photos (order-img:*) are NOT part of the backup file and are
-// therefore not touched by this script.
+// If the backup file includes an `orderImages` object (order id -> field ->
+// base64 data URL), each photo is uploaded to Firebase Storage under
+// order-images/<orderId>/<field> and only the resulting download URL is
+// written into the encrypted order-img:<id> entry - never the raw base64.
 
 import { readFileSync } from "node:fs";
 import { webcrypto as crypto } from "node:crypto";
 import { initializeApp } from "firebase/app";
 import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 import { getDatabase, ref, get, set } from "firebase/database";
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { firebaseConfig, SHARED_EMAIL } from "../src/lib/firebase-config.js";
 
 const VERIFIER_PLAINTEXT = "the-buy-verifier-v1";
+const ORDER_IMAGE_FIELDS = ["imgModel", "imgFabric", "imgAcc1", "imgAcc2", "imgAcc3", "imgAcc4"];
 
 function promptHidden(query) {
   return new Promise((resolve) => {
@@ -100,6 +104,52 @@ function dbPathForKey(key) {
   return `data/${encodeURIComponent(key)}`;
 }
 
+// "data:image/jpeg;base64,/9j/..." -> { contentType: "image/jpeg", bytes: Buffer }
+function parseDataUrl(dataUrl) {
+  const match = /^data:([^;]+);base64,(.*)$/s.exec(dataUrl);
+  if (!match) return null;
+  return { contentType: match[1], bytes: Buffer.from(match[2], "base64") };
+}
+
+async function uploadOrderImages(storage, orderImages) {
+  const orderIds = Object.keys(orderImages || {});
+  if (orderIds.length === 0) return {};
+
+  const result = {};
+  let uploaded = 0;
+  const total = orderIds.reduce(
+    (sum, id) => sum + ORDER_IMAGE_FIELDS.filter((f) => orderImages[id]?.[f]).length,
+    0
+  );
+
+  for (const orderId of orderIds) {
+    const fields = orderImages[orderId] || {};
+    const urls = {};
+    for (const field of ORDER_IMAGE_FIELDS) {
+      const dataUrl = fields[field];
+      if (!dataUrl) {
+        urls[field] = null;
+        continue;
+      }
+      const parsed = parseDataUrl(dataUrl);
+      if (!parsed) {
+        urls[field] = null;
+        continue;
+      }
+      const ext = parsed.contentType.split("/")[1] || "jpg";
+      const path = `order-images/${orderId}/${field}.${ext}`;
+      const fileRef = storageRef(storage, path);
+      await uploadBytes(fileRef, parsed.bytes, { contentType: parsed.contentType });
+      urls[field] = await getDownloadURL(fileRef);
+      uploaded++;
+      process.stdout.write(`\r  写真アップロード中... ${uploaded}/${total}`);
+    }
+    result[orderId] = urls;
+  }
+  if (total > 0) process.stdout.write("\n");
+  return result;
+}
+
 async function main() {
   const filePath = process.argv[2];
   if (!filePath) {
@@ -113,11 +163,17 @@ async function main() {
     process.exit(1);
   }
 
+  const orderImageCount = Object.values(backup.orderImages || {}).reduce(
+    (sum, fields) => sum + ORDER_IMAGE_FIELDS.filter((f) => fields[f]).length,
+    0
+  );
+
   console.log(`Importing: ${filePath}`);
   console.log(`  brands: ${backup.masters.brands?.length ?? 0}`);
   console.log(`  seasons: ${backup.masters.seasons?.length ?? 0}`);
-  console.log(`  entries: ${backup.entries?.length ?? 0}`);
+  console.log(`  entries: ${Object.keys(backup.entries ?? {}).length}`);
   console.log(`  orders: ${backup.orders?.length ?? 0}`);
+  console.log(`  order photos: ${orderImageCount}`);
   console.log("");
 
   const password = await promptHidden("共通パスワード: ");
@@ -125,6 +181,7 @@ async function main() {
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getDatabase(app);
+  const storage = getStorage(app);
 
   console.log("Firebaseにログイン中...");
   await signInWithEmailAndPassword(auth, SHARED_EMAIL, password);
@@ -162,13 +219,21 @@ async function main() {
     const json = JSON.stringify(value);
     const encrypted = await encryptString(key, json);
     await set(ref(db, dbPathForKey(storageKey)), encrypted);
-    console.log(`  \u2713 ${storageKey}`);
+    console.log(`  ✓ ${storageKey}`);
+  }
+
+  if (orderImageCount > 0) {
+    console.log("\n発注写真をFirebase Storageにアップロード中...");
+    const urlsByOrder = await uploadOrderImages(storage, backup.orderImages);
+    for (const [orderId, urls] of Object.entries(urlsByOrder)) {
+      const json = JSON.stringify(urls);
+      const encrypted = await encryptString(key, json);
+      await set(ref(db, dbPathForKey(`order-img:${orderId}`)), encrypted);
+    }
+    console.log(`  ✓ order-img:* (${Object.keys(urlsByOrder).length}件)`);
   }
 
   console.log("\nインポート完了。");
-  console.log(
-    "注意: 発注の写真データ(order-img:*)はこのバックアップに含まれていないため、インポートされていません。"
-  );
   process.exit(0);
 }
 
