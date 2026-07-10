@@ -1143,6 +1143,18 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
     })();
     return () => { cancelled = true; };
   }, [exportOrders]);
+
+  const [listImages, setListImages] = useState({});
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(
+        orders.map(async (o) => [o.id, await loadOrderImages(o.id)])
+      );
+      if (!cancelled) setListImages(Object.fromEntries(entries));
+    })();
+    return () => { cancelled = true; };
+  }, [orders]);
   const toggleExportCol = (key) => setExportCols((c) => ({ ...c, [key]: !c[key] }));
 
   const brandMap = useMemo(() => {
@@ -1694,46 +1706,100 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
       {visibleOrders.length === 0 ? (
         <div className="bbp-empty">No orders yet. Register one with “+ New Order”.</div>
       ) : (
-        <div className="bbp-tablewrap">
-          <table className="bbp-table">
-            <thead>
-              <tr>
-                <th className="bbp-th-brand">Brand</th>
-                <th>Season</th>
-                <th>Delivery</th>
-                <th>Item</th>
-                <th>Model#</th>
-                <th>Units</th>
-                <th>WSP</th>
-                <th>Total WSP</th>
-                <th>TTL ERP</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleOrders.map((o) => (
-                <tr key={o.id}>
-                  <td className="bbp-td-brand">{brandMap[o.brandId]?.name || "—"}</td>
-                  <td className="bbp-td-currency">{seasonMap[o.seasonId]?.label || "—"}</td>
-                  <td className="bbp-td-currency">{o.delivery}</td>
-                  <td className="bbp-td-currency">{o.item}</td>
-                  <td className="bbp-td-brand">{o.model}</td>
-                  <td className="bbp-td-num">{o.totalUnits}</td>
-                  <td className="bbp-td-num">{o.currency === "JPY" ? "¥" : o.currency + " "}{fmtJPY(o.wsp)}</td>
-                  <td className="bbp-td-num">{o.currency === "JPY" ? "¥" : o.currency + " "}{fmtJPY(o.totalWSP)}</td>
-                  <td className="bbp-td-num">¥{fmtJPY(o.erp)}</td>
-                  <td>
-                    <div className="bbp-orderrowactions">
-                      <button className="bbp-iconbtn" onClick={() => startEdit(o)} disabled={loadingEditId === o.id}>
-                        {loadingEditId === o.id ? "Loading…" : "Edit"}
-                      </button>
-                      <button className="bbp-iconbtn" onClick={() => deleteOrder(o.id)}>Delete</button>
+        <div className="bbp-ordlist">
+          {visibleOrders.map((o) => {
+            const imgs = listImages[o.id] || {};
+            const orderSizeList = getOrderSizeList(o);
+            return (
+              <div className="bbp-ordlcard" key={o.id}>
+                <div className="bbp-ordlcard-photo">
+                  <div className="bbp-ordlcard-tag">・{o.item}</div>
+                  <div className="bbp-ordlcard-img">
+                    {imgs.imgModel
+                      ? <img src={imgs.imgModel} alt="" />
+                      : <div className="bbp-ordlcard-noimg">No Photo</div>}
+                  </div>
+                </div>
+
+                <div className="bbp-ordlcard-body">
+                  <div className="bbp-ordlcard-toprow">
+                    <div className="bbp-ordlcard-info">
+                      <div className="bbp-ordlcard-eyebrow">
+                        {brandMap[o.brandId]?.name || "—"} · {seasonMap[o.seasonId]?.label || "—"}
+                      </div>
+                      <div className="bbp-ordlcard-model">{o.model || "—"}</div>
+                      <div className="bbp-ordlcard-fabric">{o.fabric || "—"}</div>
+                      <div className="bbp-ordlcard-color">{o.color || "—"}</div>
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <div className="bbp-ordlcard-deliv">
+                      <div className="bbp-ordlcard-delivitem">
+                        <span>Delivery</span>
+                        <strong>{o.delivery || "—"}</strong>
+                      </div>
+                      <div className="bbp-ordlcard-delivitem">
+                        <span>LTS</span>
+                        <strong>{o.lts || "—"}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bbp-sizechiprow">
+                    {orderSizeList.map((s) => {
+                      const qty = Number(o.sizes?.[s]) || 0;
+                      return (
+                        <div className="bbp-sizechip" key={s}>
+                          <span className="bbp-sizechip-label">{s}</span>
+                          <span className="bbp-sizechip-qty">{qty > 0 ? qty : "—"}</span>
+                        </div>
+                      );
+                    })}
+                    <div className="bbp-sizechip bbp-sizechip--total">
+                      <span className="bbp-sizechip-label">Total</span>
+                      <span className="bbp-sizechip-qty">{o.totalUnits || 0}</span>
+                    </div>
+                  </div>
+
+                  <div className="bbp-ordlcard-nums">
+                    <div className="bbp-ordlcard-numitem">
+                      <span>WSP</span>
+                      <strong>{o.wsp ? `${o.currency === "JPY" ? "¥" : o.currency + " "}${fmtJPY(o.wsp)}` : "—"}</strong>
+                    </div>
+                    <div className="bbp-ordlcard-numitem">
+                      <span>RP</span>
+                      <strong>{o.rp ? `¥${fmtJPY(o.rp)}` : "—"}</strong>
+                    </div>
+                    <div className="bbp-ordlcard-numitem">
+                      <span>Total WSP</span>
+                      <strong>{o.totalWSP ? `${o.currency === "JPY" ? "¥" : o.currency + " "}${fmtJPY(o.totalWSP)}` : "—"}</strong>
+                    </div>
+                    <div className="bbp-ordlcard-numitem">
+                      <span>Total RP</span>
+                      <strong>{o.erp ? `¥${fmtJPY(o.erp)}` : "—"}</strong>
+                    </div>
+                  </div>
+                  <div className="bbp-ordlcard-nums bbp-ordlcard-nums--2">
+                    <div className="bbp-ordlcard-numitem">
+                      <span>Mark up</span>
+                      <strong>{o.markup ? `${o.markup.toFixed(2)}x` : "—"}</strong>
+                    </div>
+                    <div className="bbp-ordlcard-numitem">
+                      <span>Cost %</span>
+                      <strong>{o.costPct ? `${o.costPct}%` : "—"}</strong>
+                    </div>
+                  </div>
+
+                  {o.memo && <div className="bbp-ordlcard-memo">{o.memo}</div>}
+
+                  <div className="bbp-orderrowactions">
+                    <button className="bbp-iconbtn" onClick={() => startEdit(o)} disabled={loadingEditId === o.id}>
+                      {loadingEditId === o.id ? "Loading…" : "Edit"}
+                    </button>
+                    <button className="bbp-iconbtn" onClick={() => deleteOrder(o.id)}>Delete</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -2445,6 +2511,57 @@ function Style() {
         background: transparent; border: 1px solid var(--line); color: var(--ink); padding: 5px 9px; cursor: pointer;
       }
       .bbp-iconbtn:hover { border-color: var(--ink); }
+
+      .bbp-ordlist { display: flex; flex-direction: column; gap: 16px; }
+      .bbp-ordlcard {
+        display: flex; gap: 20px; background: var(--surface); border: 1px solid var(--line); padding: 18px;
+      }
+      .bbp-ordlcard-photo { width: 160px; flex-shrink: 0; }
+      .bbp-ordlcard-tag {
+        font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; color: var(--ink-soft);
+        padding-bottom: 6px; margin-bottom: 8px; border-bottom: 1px solid var(--line);
+      }
+      .bbp-ordlcard-img {
+        width: 160px; height: 190px; border: 1px solid var(--line); background: var(--bg);
+        display: flex; align-items: center; justify-content: center; overflow: hidden;
+      }
+      .bbp-ordlcard-img img { width: 100%; height: 100%; object-fit: cover; }
+      .bbp-ordlcard-noimg {
+        font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft);
+      }
+      .bbp-ordlcard-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+      .bbp-ordlcard-toprow { display: flex; justify-content: space-between; gap: 16px; }
+      .bbp-ordlcard-info { min-width: 0; }
+      .bbp-ordlcard-eyebrow {
+        font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 4px;
+      }
+      .bbp-ordlcard-model { font-family: var(--font-serif); font-size: 16px; font-weight: 600; color: var(--ink); }
+      .bbp-ordlcard-fabric, .bbp-ordlcard-color { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+      .bbp-ordlcard-deliv { display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; text-align: right; }
+      .bbp-ordlcard-delivitem { display: flex; flex-direction: column; gap: 2px; }
+      .bbp-ordlcard-delivitem span {
+        font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft);
+      }
+      .bbp-ordlcard-delivitem strong { font-family: var(--font-mono); font-size: 13px; color: var(--ink); }
+
+      .bbp-sizechiprow { display: flex; gap: 6px; flex-wrap: wrap; }
+      .bbp-sizechip {
+        display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 40px;
+        border: 1px solid var(--line); padding: 5px 8px; background: var(--bg);
+      }
+      .bbp-sizechip-label { font-size: 9px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-soft); }
+      .bbp-sizechip-qty { font-family: var(--font-mono); font-size: 13px; font-weight: 600; color: var(--ink); }
+      .bbp-sizechip--total { background: var(--ink); border-color: var(--ink); }
+      .bbp-sizechip--total .bbp-sizechip-label, .bbp-sizechip--total .bbp-sizechip-qty { color: var(--bg); }
+
+      .bbp-ordlcard-nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+      .bbp-ordlcard-nums--2 { grid-template-columns: repeat(2, 1fr); max-width: 260px; }
+      .bbp-ordlcard-numitem { display: flex; flex-direction: column; gap: 2px; }
+      .bbp-ordlcard-numitem span {
+        font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft);
+      }
+      .bbp-ordlcard-numitem strong { font-family: var(--font-mono); font-size: 13px; color: var(--ink); }
+      .bbp-ordlcard-memo { font-size: 11px; color: var(--ink-soft); font-style: italic; }
 
       /* Export / Print preview */
       .bbp-exportpreview { background: var(--surface); border: 1px solid var(--line); padding: 40px 44px; margin-bottom: 40px; }
