@@ -1150,6 +1150,29 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
   }, [orders]);
   const toggleExportCol = (key) => setExportCols((c) => ({ ...c, [key]: !c[key] }));
 
+  // Auto-numbered purchase orders: one counter per brand+season, bumped each
+  // time a document is actually issued (Excel/PDF), so re-issuing a revision
+  // the same day still gets a distinct, traceable number.
+  const [poNumbers, setPoNumbers] = useState({});
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await window.storage.get("bybrand:ponumbers", false);
+        if (r && r.value) setPoNumbers(JSON.parse(r.value));
+      } catch (err) { /* no PO numbers issued yet */ }
+    })();
+  }, []);
+  const poKey = `${exportBrandId}|${exportSeasonId}`;
+  const poNextRev = (poNumbers[poKey] || 0) + 1;
+  const poNumber = (brandForPo, seasonForPo, rev) =>
+    `${seasonForPo?.year ?? ""}${seasonForPo?.type ?? ""}-${(brandForPo?.id || "").toUpperCase()}-R${String(rev).padStart(2, "0")}`;
+  const issuePoNumber = async () => {
+    const updated = { ...poNumbers, [poKey]: poNextRev };
+    setPoNumbers(updated);
+    try { await window.storage.set("bybrand:ponumbers", JSON.stringify(updated), false); } catch (err) { /* will retry on next issue */ }
+    return poNextRev;
+  };
+
   const brandMap = useMemo(() => {
     const m = {};
     masters.brands.forEach((b) => (m[b.id] = b));
@@ -1266,10 +1289,12 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
 
     const sizeCols = collectSizeColumns(exportOrders);
 
-    const handleDownloadXLSX = () => {
+    const handleDownloadXLSX = async () => {
+      const po = poNumber(brand, season, poNextRev);
       const wb = XLSX.utils.book_new();
       const rows = [];
       rows.push([`${season?.label || ""} ${brand?.name || ""} Purchase Order`]);
+      rows.push([`PO#: ${po}`]);
       const accHeaders = accCols.map((_, i) => `Acc-${i + 1}`);
       const optHeaders = [
         visibleCols.wsplb && "Total WSP+IPC",
@@ -1320,7 +1345,8 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
         ...(visibleCols.lts ? [{ wch: 6 }] : []),
       ];
       XLSX.utils.book_append_sheet(wb, ws, "Purchase Order");
-      const filename = `${season?.label || "season"}_${brand?.name || "brand"}_PurchaseOrder.xlsx`.replace(/\s+/g, "_");
+      const filename = `${po}.xlsx`.replace(/\s+/g, "_");
+      await issuePoNumber();
       XLSX.writeFile(wb, filename);
     };
 
@@ -1388,7 +1414,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
 
         <div className="bbp-orderactions bbp-noprint">
           <button className="bbp-btn" onClick={handleDownloadXLSX}>Download Excel (.xlsx)</button>
-          <button className="bbp-btn bbp-btn--ghost" onClick={() => window.print()}>Save as PDF</button>
+          <button className="bbp-btn bbp-btn--ghost" onClick={async () => { await issuePoNumber(); window.print(); }}>Save as PDF</button>
         </div>
 
         <div className="bbp-exportpreview">
@@ -1398,9 +1424,11 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
               <div className="bbp-exportsub">{season?.label || "—"} · PURCHASE ORDER</div>
             </div>
             <div className="bbp-exportmeta">
+              <div>PO#: {poNumber(brand, season, poNextRev)}</div>
               <div>DATE: {new Date().toLocaleDateString("ja-JP")}</div>
               <div>ITEMS: {exportOrders.length}</div>
               <div>TOTAL UNITS: {totals.units}</div>
+              <div>TOTAL WSP: {currencyLabel} {fmt2(totals.wsp)}</div>
             </div>
           </div>
 
@@ -1408,7 +1436,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
             <div className="bbp-empty">No orders for this brand and season yet.</div>
           ) : (
             <>
-              <div className="bbp-ordlist">
+              <div className="bbp-ordlist bbp-ordlist--compact">
                 {exportOrders.map((o, i) => {
                   const imgs = exportImages[o.id] || {};
                   const numItems = [
@@ -1423,7 +1451,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                   ].filter(Boolean);
 
                   return (
-                    <div className="bbp-ordlcard" key={o.id}>
+                    <div className="bbp-ordlcard bbp-ordlcard--compact" key={o.id}>
                       <div className="bbp-ordlcard-photo">
                         <div className="bbp-ordlcard-tag">・{o.item}</div>
                         <div className="bbp-ordlcard-img">
@@ -2622,6 +2650,37 @@ function Style() {
         justify-content: center; z-index: 300; cursor: zoom-out; padding: 40px; box-sizing: border-box;
       }
       .bbp-lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5); }
+
+      /* Export/Print: compact card, 5 fit per printed page */
+      .bbp-ordlist--compact { gap: 0; }
+      .bbp-ordlcard--compact {
+        gap: 16px; padding: 13px 0; background: transparent; border: none; border-bottom: 1px solid var(--line);
+      }
+      .bbp-ordlcard--compact .bbp-ordlcard-photo { width: 64px; }
+      .bbp-ordlcard--compact .bbp-ordlcard-tag { font-size: 8px; padding-bottom: 3px; margin-bottom: 4px; }
+      .bbp-ordlcard--compact .bbp-ordlcard-img { width: 64px; height: 78px; }
+      .bbp-ordlcard--compact .bbp-ordlcard-body { gap: 6px; }
+      .bbp-ordlcard--compact .bbp-ordlcard-eyebrow { font-size: 8px; margin-bottom: 1px; }
+      .bbp-ordlcard--compact .bbp-ordlcard-model { font-size: 13px; }
+      .bbp-ordlcard--compact .bbp-ordlcard-fabric,
+      .bbp-ordlcard--compact .bbp-ordlcard-color { font-size: 10px; margin-top: 0; }
+      .bbp-ordlcard--compact .bbp-ordlcard-deliv { gap: 6px; }
+      .bbp-ordlcard--compact .bbp-ordlcard-delivitem span { font-size: 7.5px; }
+      .bbp-ordlcard--compact .bbp-ordlcard-delivitem strong { font-size: 11px; }
+      .bbp-ordlcard--compact .bbp-sizechiprow { gap: 3px; max-width: 260px; }
+      .bbp-ordlcard--compact .bbp-sizechip { min-width: 22px; padding: 2px 4px; }
+      .bbp-ordlcard--compact .bbp-sizechip-label { font-size: 6px; }
+      .bbp-ordlcard--compact .bbp-sizechip-qty { font-size: 9.5px; }
+      .bbp-ordlcard--compact .bbp-ordlcard-accs { gap: 6px; }
+      .bbp-ordlcard--compact .bbp-ordlcard-acc { font-size: 9px; padding: 2px 6px 2px 2px; }
+      .bbp-ordlcard--compact .bbp-exportimg-inline { width: 16px; height: 16px; margin-right: 4px; }
+      .bbp-ordlcard--compact .bbp-ordlcard-nums--flex { gap: 6px 16px; }
+      .bbp-ordlcard--compact .bbp-ordlcard-numitem span { font-size: 7px; }
+      .bbp-ordlcard--compact .bbp-ordlcard-numitem strong { font-size: 10px; }
+      .bbp-ordlcard--compact .bbp-ordlcard-memo { font-size: 9px; }
+      @media print {
+        .bbp-ordlist--compact > .bbp-ordlcard--compact:nth-child(5n) { break-after: page; }
+      }
 
       /* Export / Print preview */
       .bbp-exportpreview { background: var(--surface); border: 1px solid var(--line); padding: 40px 44px; margin-bottom: 40px; }
