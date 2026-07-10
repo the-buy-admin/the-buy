@@ -1176,6 +1176,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
     setView("form");
   };
 
+  const [lightbox, setLightbox] = useState(null);
   const [loadingEditId, setLoadingEditId] = useState(null);
   const startEdit = async (order) => {
     setLoadingEditId(order.id);
@@ -1271,7 +1272,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
       rows.push([`${season?.label || ""} ${brand?.name || ""} Purchase Order`]);
       const accHeaders = accCols.map((_, i) => `Acc-${i + 1}`);
       const optHeaders = [
-        visibleCols.wsplb && "Total WSP+LB",
+        visibleCols.wsplb && "Total WSP+IPC",
         visibleCols.erp && "TTL ERP",
         visibleCols.rp && "RP",
         visibleCols.rate && "Exchange Rate",
@@ -1307,7 +1308,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
       const optBlanks = optHeaders.map(() => "");
       rows.push([
         "", "", "TOTAL", "", "", "", ...accCols.map(() => ""), ...sizeCols.map(() => ""), totals.units, "", totals.wsp,
-        ...optBlanks.map((_, i) => (optHeaders[i] === "TTL ERP" ? totals.erp : optHeaders[i] === "Total WSP+LB" ? totals.wsplb : "")),
+        ...optBlanks.map((_, i) => (optHeaders[i] === "TTL ERP" ? totals.erp : optHeaders[i] === "Total WSP+IPC" ? totals.wsplb : "")),
         "", ...(visibleCols.memo ? [""] : []), ...(visibleCols.lts ? [""] : []),
       ]);
       const ws = XLSX.utils.aoa_to_sheet(rows);
@@ -1374,7 +1375,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
           </div>
           <div className="bbp-colcheckrow">
             {[
-              ["wsplb", "Total WSP+LB"], ["erp", "TTL ERP"], ["rp", "RP"], ["rate", "Exchange Rate"],
+              ["wsplb", "Total WSP+IPC"], ["erp", "TTL ERP"], ["rp", "RP"], ["rate", "Exchange Rate"],
               ["cost", "Cost %"], ["markup", "Mark Up"], ["lts", "LTS"], ["memo", "Internal Memo"],
             ].map(([key, label]) => (
               <label className="bbp-check" key={key}>
@@ -1424,7 +1425,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                   const numItems = [
                     { key: "wsp", label: "WSP", value: o.wsp ? `${o.currency === "JPY" ? "¥" : o.currency + " "}${fmt2(o.wsp)}` : "—" },
                     { key: "totalwsp", label: "Total WSP", value: o.totalWSP ? `${o.currency === "JPY" ? "¥" : o.currency + " "}${fmt2(o.totalWSP)}` : "—" },
-                    visibleCols.wsplb && { key: "wsplb", label: "Total WSP+LB", value: o.totalWSPLB ? `${o.currency === "JPY" ? "¥" : o.currency + " "}${fmt2(o.totalWSPLB)}` : "—" },
+                    visibleCols.wsplb && { key: "wsplb", label: "Total WSP+IPC", value: o.totalWSPLB ? `${o.currency === "JPY" ? "¥" : o.currency + " "}${fmt2(o.totalWSPLB)}` : "—" },
                     visibleCols.rp && { key: "rp", label: "RP", value: o.rp ? `¥${fmtJPY(o.rp)}` : "—" },
                     visibleCols.erp && { key: "erp", label: "TTL ERP", value: o.erp ? `¥${fmtJPY(o.erp)}` : "—" },
                     visibleCols.rate && { key: "rate", label: "Rate", value: o.exrate || "—" },
@@ -1438,7 +1439,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                         <div className="bbp-ordlcard-tag">・{o.item}</div>
                         <div className="bbp-ordlcard-img">
                           {imgs.imgModel
-                            ? <img src={imgs.imgModel} alt="" />
+                            ? <img src={imgs.imgModel} alt="" onClick={() => setLightbox(imgs.imgModel)} />
                             : <div className="bbp-ordlcard-noimg">No Photo</div>}
                         </div>
                       </div>
@@ -1449,7 +1450,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                             <div className="bbp-ordlcard-eyebrow">#{i + 1}</div>
                             <div className="bbp-ordlcard-model">{o.model || "—"}</div>
                             <div className="bbp-ordlcard-fabric">
-                              {imgs.imgFabric && <img className="bbp-exportimg-inline" src={imgs.imgFabric} alt="" />}
+                              {imgs.imgFabric && <img className="bbp-exportimg-inline" src={imgs.imgFabric} alt="" onClick={() => setLightbox(imgs.imgFabric)} />}
                               {o.fabric || "—"}
                             </div>
                             <div className="bbp-ordlcard-color">{o.color || "—"}</div>
@@ -1475,7 +1476,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                               if (!o[key] && !imgs[imgKey]) return null;
                               return (
                                 <div className="bbp-ordlcard-acc" key={key}>
-                                  {imgs[imgKey] && <img className="bbp-exportimg-inline" src={imgs[imgKey]} alt="" />}
+                                  {imgs[imgKey] && <img className="bbp-exportimg-inline" src={imgs[imgKey]} alt="" onClick={() => setLightbox(imgs[imgKey])} />}
                                   {o[key]}
                                 </div>
                               );
@@ -1518,12 +1519,17 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
               <div className="bbp-exporttotals">
                 <div>TTL Units: {totals.units}</div>
                 <div>Total WSP: {currencyLabel} {fmt2(totals.wsp)}</div>
-                {visibleCols.wsplb && <div>Total WSP+LB: {currencyLabel} {fmt2(totals.wsplb)}</div>}
+                {visibleCols.wsplb && <div>Total WSP+IPC: {currencyLabel} {fmt2(totals.wsplb)}</div>}
                 {visibleCols.erp && <div className="bbp-exporttotals-main">TTL ERP: ¥{fmtJPY(totals.erp)}</div>}
               </div>
             </>
           )}
         </div>
+        {lightbox && (
+          <div className="bbp-lightbox" onClick={() => setLightbox(null)}>
+            <img src={lightbox} alt="" />
+          </div>
+        )}
       </div>
     );
   }
@@ -1751,7 +1757,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                   <div className="bbp-ordlcard-tag">・{o.item}</div>
                   <div className="bbp-ordlcard-img">
                     {imgs.imgModel
-                      ? <img src={imgs.imgModel} alt="" />
+                      ? <img src={imgs.imgModel} alt="" onClick={() => setLightbox(imgs.imgModel)} />
                       : <div className="bbp-ordlcard-noimg">No Photo</div>}
                   </div>
                 </div>
@@ -1808,7 +1814,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                       <strong>{o.totalWSP ? `${o.currency === "JPY" ? "¥" : o.currency + " "}${fmtJPY(o.totalWSP)}` : "—"}</strong>
                     </div>
                     <div className="bbp-ordlcard-numitem">
-                      <span>Total WSP+IP (JPY)</span>
+                      <span>Total WSP+IPC (JPY)</span>
                       <strong>
                         {o.totalWSPLB
                           ? `¥${fmtJPY(o.totalWSPLB * (o.currency === "JPY" ? 1 : (Number(o.exrate) || 0)))}`
@@ -1843,6 +1849,11 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
               </div>
             );
           })}
+        </div>
+      )}
+      {lightbox && (
+        <div className="bbp-lightbox" onClick={() => setLightbox(null)}>
+          <img src={lightbox} alt="" />
         </div>
       )}
     </div>
@@ -2568,7 +2579,7 @@ function Style() {
         width: 160px; height: 190px; border: 1px solid var(--line); background: var(--bg);
         display: flex; align-items: center; justify-content: center; overflow: hidden;
       }
-      .bbp-ordlcard-img img { width: 100%; height: 100%; object-fit: cover; }
+      .bbp-ordlcard-img img { width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }
       .bbp-ordlcard-noimg {
         font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft);
       }
@@ -2614,8 +2625,14 @@ function Style() {
       }
       .bbp-exportimg-inline {
         display: inline-block; width: 22px; height: 22px; object-fit: cover; vertical-align: middle;
-        margin-right: 6px; border: 1px solid var(--line);
+        margin-right: 6px; border: 1px solid var(--line); cursor: zoom-in;
       }
+
+      .bbp-lightbox {
+        position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85); display: flex; align-items: center;
+        justify-content: center; z-index: 300; cursor: zoom-out; padding: 40px; box-sizing: border-box;
+      }
+      .bbp-lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5); }
 
       /* Export / Print preview */
       .bbp-exportpreview { background: var(--surface); border: 1px solid var(--line); padding: 40px 44px; margin-bottom: 40px; }
