@@ -1078,13 +1078,6 @@ function DashboardPane({ trend, brandBreakdown, currentSeason, sortedSeasons, se
 function fmt2(n) {
   return (Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-function sizesToText(o) {
-  const entries = Object.entries(o.sizes || {}).filter(([, v]) => Number(v) > 0);
-  const order = sortSizeKeys(entries.map(([k]) => k));
-  const map = Object.fromEntries(entries);
-  return order.map((k) => `${k}:${map[k]}`).join(" ");
-}
-
 function ImageDropZone({ label, value, onChange }) {
   const [dragOver, setDragOver] = useState(false);
   const handleFile = async (file) => {
@@ -1425,61 +1418,103 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
             <div className="bbp-empty">No orders for this brand and season yet.</div>
           ) : (
             <>
-              <table className="bbp-exporttable">
-                <thead>
-                  <tr>
-                    <th>#</th><th>Delivery</th><th>Item</th><th>Model#</th><th>Fabric</th><th>Color</th>
-                    {accCols.map((key, i) => <th key={key}>Acc-{i + 1}</th>)}
-                    <th>Sizes</th>
-                    <th className="num">Units</th><th className="num">WSP</th><th className="num">Total WSP</th>
-                    {visibleCols.wsplb && <th className="num">Total WSP+LB</th>}
-                    {visibleCols.erp && <th className="num">TTL ERP</th>}
-                    {visibleCols.rp && <th className="num">RP</th>}
-                    {visibleCols.rate && <th className="num">Rate</th>}
-                    {visibleCols.cost && <th className="num">Cost %</th>}
-                    {visibleCols.markup && <th className="num">Mark Up</th>}
-                    <th>Note</th>
-                    {visibleCols.memo && <th>Memo</th>}
-                    {visibleCols.lts && <th>LTS</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {exportOrders.map((o, i) => {
-                    const imgs = exportImages[o.id] || {};
-                    return (
-                    <tr key={o.id}>
-                      <td>{i + 1}</td>
-                      <td>{o.delivery}</td>
-                      <td>{o.item}</td>
-                      <td>{imgs.imgModel && <img className="bbp-exportimg" src={imgs.imgModel} alt="" />}{o.model}</td>
-                      <td>{imgs.imgFabric && <img className="bbp-exportimg" src={imgs.imgFabric} alt="" />}{o.fabric}</td>
-                      <td>{o.color}</td>
-                      {accCols.map((key) => {
-                        const imgKey = "img" + key.charAt(0).toUpperCase() + key.slice(1);
-                        return (
-                          <td key={key}>
-                            {imgs[imgKey] && <img className="bbp-exportimg" src={imgs[imgKey]} alt="" />}{o[key]}
-                          </td>
-                        );
-                      })}
-                      <td>{sizesToText(o) || "—"}</td>
-                      <td className="num">{o.totalUnits}</td>
-                      <td className="num">{o.currency === "JPY" ? "¥" : ""}{fmt2(o.wsp)}</td>
-                      <td className="num">{o.currency === "JPY" ? "¥" : ""}{fmt2(o.totalWSP)}</td>
-                      {visibleCols.wsplb && <td className="num">{o.currency === "JPY" ? "¥" : ""}{fmt2(o.totalWSPLB)}</td>}
-                      {visibleCols.erp && <td className="num">¥{fmtJPY(o.erp)}</td>}
-                      {visibleCols.rp && <td className="num">¥{fmtJPY(o.rp)}</td>}
-                      {visibleCols.rate && <td className="num">{o.exrate}</td>}
-                      {visibleCols.cost && <td className="num">{o.costPct}%</td>}
-                      {visibleCols.markup && <td className="num">{o.markup ? `${o.markup.toFixed(2)}x` : "—"}</td>}
-                      <td>{o.note}</td>
-                      {visibleCols.memo && <td>{o.memo}</td>}
-                      {visibleCols.lts && <td>{o.lts}</td>}
-                    </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <div className="bbp-ordlist">
+                {exportOrders.map((o, i) => {
+                  const imgs = exportImages[o.id] || {};
+                  const numItems = [
+                    { key: "wsp", label: "WSP", value: o.wsp ? `${o.currency === "JPY" ? "¥" : o.currency + " "}${fmt2(o.wsp)}` : "—" },
+                    { key: "totalwsp", label: "Total WSP", value: o.totalWSP ? `${o.currency === "JPY" ? "¥" : o.currency + " "}${fmt2(o.totalWSP)}` : "—" },
+                    visibleCols.wsplb && { key: "wsplb", label: "Total WSP+LB", value: o.totalWSPLB ? `${o.currency === "JPY" ? "¥" : o.currency + " "}${fmt2(o.totalWSPLB)}` : "—" },
+                    visibleCols.rp && { key: "rp", label: "RP", value: o.rp ? `¥${fmtJPY(o.rp)}` : "—" },
+                    visibleCols.erp && { key: "erp", label: "TTL ERP", value: o.erp ? `¥${fmtJPY(o.erp)}` : "—" },
+                    visibleCols.rate && { key: "rate", label: "Rate", value: o.exrate || "—" },
+                    visibleCols.cost && { key: "cost", label: "Cost %", value: o.costPct ? `${o.costPct}%` : "—" },
+                    visibleCols.markup && { key: "markup", label: "Mark Up", value: o.markup ? `${o.markup.toFixed(2)}x` : "—" },
+                  ].filter(Boolean);
+
+                  return (
+                    <div className="bbp-ordlcard" key={o.id}>
+                      <div className="bbp-ordlcard-photo">
+                        <div className="bbp-ordlcard-tag">・{o.item}</div>
+                        <div className="bbp-ordlcard-img">
+                          {imgs.imgModel
+                            ? <img src={imgs.imgModel} alt="" />
+                            : <div className="bbp-ordlcard-noimg">No Photo</div>}
+                        </div>
+                      </div>
+
+                      <div className="bbp-ordlcard-body">
+                        <div className="bbp-ordlcard-toprow">
+                          <div className="bbp-ordlcard-info">
+                            <div className="bbp-ordlcard-eyebrow">#{i + 1}</div>
+                            <div className="bbp-ordlcard-model">{o.model || "—"}</div>
+                            <div className="bbp-ordlcard-fabric">
+                              {imgs.imgFabric && <img className="bbp-exportimg-inline" src={imgs.imgFabric} alt="" />}
+                              {o.fabric || "—"}
+                            </div>
+                            <div className="bbp-ordlcard-color">{o.color || "—"}</div>
+                          </div>
+                          <div className="bbp-ordlcard-deliv">
+                            <div className="bbp-ordlcard-delivitem">
+                              <span>Delivery</span>
+                              <strong>{o.delivery || "—"}</strong>
+                            </div>
+                            {visibleCols.lts && (
+                              <div className="bbp-ordlcard-delivitem">
+                                <span>LTS</span>
+                                <strong>{o.lts || "—"}</strong>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {accCols.length > 0 && (
+                          <div className="bbp-ordlcard-accs">
+                            {accCols.map((key) => {
+                              const imgKey = "img" + key.charAt(0).toUpperCase() + key.slice(1);
+                              if (!o[key] && !imgs[imgKey]) return null;
+                              return (
+                                <div className="bbp-ordlcard-acc" key={key}>
+                                  {imgs[imgKey] && <img className="bbp-exportimg-inline" src={imgs[imgKey]} alt="" />}
+                                  {o[key]}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        <div className="bbp-sizechiprow">
+                          {sizeCols.map((s) => {
+                            const qty = Number(o.sizes?.[s]) || 0;
+                            return (
+                              <div className="bbp-sizechip" key={s}>
+                                <span className="bbp-sizechip-label">{s}</span>
+                                <span className="bbp-sizechip-qty">{qty > 0 ? qty : "—"}</span>
+                              </div>
+                            );
+                          })}
+                          <div className="bbp-sizechip bbp-sizechip--total">
+                            <span className="bbp-sizechip-label">Total</span>
+                            <span className="bbp-sizechip-qty">{o.totalUnits || 0}</span>
+                          </div>
+                        </div>
+
+                        <div className="bbp-ordlcard-nums bbp-ordlcard-nums--flex">
+                          {numItems.map((n) => (
+                            <div className="bbp-ordlcard-numitem" key={n.key}>
+                              <span>{n.label}</span>
+                              <strong>{n.value}</strong>
+                            </div>
+                          ))}
+                        </div>
+
+                        {o.note && <div className="bbp-ordlcard-memo">Note: {o.note}</div>}
+                        {visibleCols.memo && o.memo && <div className="bbp-ordlcard-memo">Memo: {o.memo}</div>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
               <div className="bbp-exporttotals">
                 <div>TTL Units: {totals.units}</div>
                 <div>Total WSP: {currencyLabel} {fmt2(totals.wsp)}</div>
@@ -2562,6 +2597,16 @@ function Style() {
       }
       .bbp-ordlcard-numitem strong { font-family: var(--font-mono); font-size: 13px; color: var(--ink); }
       .bbp-ordlcard-memo { font-size: 11px; color: var(--ink-soft); font-style: italic; }
+      .bbp-ordlcard-nums--flex { display: flex; flex-wrap: wrap; gap: 14px 22px; }
+      .bbp-ordlcard-accs { display: flex; flex-wrap: wrap; gap: 10px; }
+      .bbp-ordlcard-acc {
+        display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-soft);
+        border: 1px solid var(--line); padding: 4px 8px 4px 4px; max-width: 220px;
+      }
+      .bbp-exportimg-inline {
+        display: inline-block; width: 22px; height: 22px; object-fit: cover; vertical-align: middle;
+        margin-right: 6px; border: 1px solid var(--line);
+      }
 
       /* Export / Print preview */
       .bbp-exportpreview { background: var(--surface); border: 1px solid var(--line); padding: 40px 44px; margin-bottom: 40px; }
@@ -2569,11 +2614,6 @@ function Style() {
       .bbp-exportbrand { font-family: var(--font-serif); font-size: 22px; font-weight: 500; letter-spacing: 0.02em; }
       .bbp-exportsub { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft); margin-top: 6px; }
       .bbp-exportmeta { text-align: right; font-family: var(--font-mono); font-size: 10px; color: var(--ink-soft); line-height: 1.9; }
-      .bbp-exporttable { width: 100%; border-collapse: collapse; font-size: 10.5px; }
-      .bbp-exporttable th, .bbp-exporttable td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
-      .bbp-exporttable th { font-family: var(--font-sans); font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); font-weight: 400; }
-      .bbp-exporttable th.num, .bbp-exporttable td.num { text-align: right; font-family: var(--font-mono); }
-      .bbp-exportimg { display: block; width: 44px; height: 44px; object-fit: cover; margin-bottom: 4px; border: 1px solid var(--line); }
       .bbp-exporttotals {
         display: flex; justify-content: flex-end; gap: 24px; margin-top: 18px; padding-top: 14px;
         border-top: 1px solid var(--ink); font-family: var(--font-mono); font-size: 11px; flex-wrap: wrap;
