@@ -1794,7 +1794,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                     </div>
                   </div>
 
-                  <div className="bbp-ordlcard-nums">
+                  <div className="bbp-ordlcard-nums bbp-ordlcard-nums--5">
                     <div className="bbp-ordlcard-numitem">
                       <span>WSP</span>
                       <strong>{o.wsp ? `${o.currency === "JPY" ? "¥" : o.currency + " "}${fmtJPY(o.wsp)}` : "—"}</strong>
@@ -1804,11 +1804,19 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                       <strong>{o.rp ? `¥${fmtJPY(o.rp)}` : "—"}</strong>
                     </div>
                     <div className="bbp-ordlcard-numitem">
-                      <span>Total WSP</span>
+                      <span>Total WSP ({o.currency})</span>
                       <strong>{o.totalWSP ? `${o.currency === "JPY" ? "¥" : o.currency + " "}${fmtJPY(o.totalWSP)}` : "—"}</strong>
                     </div>
                     <div className="bbp-ordlcard-numitem">
-                      <span>Total RP</span>
+                      <span>Total WSP+IP (JPY)</span>
+                      <strong>
+                        {o.totalWSPLB
+                          ? `¥${fmtJPY(o.totalWSPLB * (o.currency === "JPY" ? 1 : (Number(o.exrate) || 0)))}`
+                          : "—"}
+                      </strong>
+                    </div>
+                    <div className="bbp-ordlcard-numitem">
+                      <span>Total RP (JPY)</span>
                       <strong>{o.erp ? `¥${fmtJPY(o.erp)}` : "—"}</strong>
                     </div>
                   </div>
@@ -2591,6 +2599,7 @@ function Style() {
 
       .bbp-ordlcard-nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
       .bbp-ordlcard-nums--2 { grid-template-columns: repeat(2, 1fr); max-width: 260px; }
+      .bbp-ordlcard-nums--5 { grid-template-columns: repeat(5, 1fr); }
       .bbp-ordlcard-numitem { display: flex; flex-direction: column; gap: 2px; }
       .bbp-ordlcard-numitem span {
         font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft);
