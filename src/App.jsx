@@ -1388,18 +1388,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
 
         <div className="bbp-orderactions bbp-noprint">
           <button className="bbp-btn" onClick={handleDownloadXLSX}>Download Excel (.xlsx)</button>
-          <button
-            className="bbp-btn bbp-btn--ghost"
-            onClick={() =>
-              setModal({
-                type: "alert",
-                title: "Print Isn't Available Here",
-                message: "This preview can't trigger the browser's print dialog itself (a security restriction of this sandboxed window). To print, use your browser's own menu instead: right-click this page and choose \"Print\", or use your browser's File menu → Print, while this Export preview is on screen. \"Download Excel\" is also available as an alternative.",
-              })
-            }
-          >
-            Print
-          </button>
+          <button className="bbp-btn bbp-btn--ghost" onClick={() => window.print()}>Save as PDF</button>
         </div>
 
         <div className="bbp-exportpreview">
@@ -2690,6 +2679,7 @@ function Style() {
         .bbp-side, .bbp-noprint { display: none !important; }
         .bbp-main { padding: 0 !important; }
         .bbp-exportpreview { border: none !important; padding: 0 !important; }
+        .bbp-ordlcard { break-inside: avoid; }
       }
     `}</style>
   );
