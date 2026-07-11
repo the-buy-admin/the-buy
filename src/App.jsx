@@ -945,11 +945,12 @@ function TablePane({
                       onCommit={(v) => setEntry(r.brand.id, currentSeason.id, "plan", "local", v)}
                     />
                   </td>
-                  <td>
-                    {isJPY ? <span className="bbp-fixed">1</span> : (
+                  <td className="bbp-td-rate">
+                    {isJPY ? <span className="bbp-fixed">—</span> : (
                       <EditableNumber
                         value={r.plan.rate}
                         width={64}
+                        align="center"
                         onCommit={(v) => setEntry(r.brand.id, currentSeason.id, "plan", "rate", v)}
                       />
                     )}
@@ -973,13 +974,14 @@ function TablePane({
                       />
                     )}
                   </td>
-                  <td>
+                  <td className="bbp-td-rate">
                     {r.actualSource === "orders" ? (
                       <span className="bbp-fromorders">{r.actual.rate ? r.actual.rate.toFixed(2) : "—"}</span>
-                    ) : isJPY ? <span className="bbp-fixed">1</span> : (
+                    ) : isJPY ? <span className="bbp-fixed">—</span> : (
                       <EditableNumber
                         value={r.actual.rate}
                         width={64}
+                        align="center"
                         onCommit={(v) => setEntry(r.brand.id, currentSeason.id, "actual", "rate", v)}
                       />
                     )}
@@ -2435,6 +2437,7 @@ function Style() {
       .bbp-td-brand { text-align: left; font-weight: 400; position: sticky; left: 0; background: var(--surface); z-index: 1; vertical-align: middle; }
       .bbp-row--inactive .bbp-td-brand { color: var(--ink-soft); font-style: normal; }
       .bbp-td-currency { text-align: center; color: var(--ink-soft); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.05em; }
+      .bbp-td-rate { text-align: center; }
       .bbp-td-num { text-align: right; font-family: var(--font-mono); font-weight: 300; }
       .bbp-td-jpy { text-align: right; font-family: var(--font-mono); font-weight: 400; }
       .bbp-td-jpy--plan { color: var(--ink-soft); }
