@@ -2742,7 +2742,7 @@ function Style() {
       @media print {
         .bbp-side, .bbp-noprint { display: none !important; }
         .bbp-main { padding: 0 !important; }
-        .bbp-exportpreview { border: none !important; padding: 0 !important; }
+        .bbp-exportpreview { border: none !important; padding: 12mm !important; }
         .bbp-ordlcard { break-inside: avoid; }
       }
     `}</style>
