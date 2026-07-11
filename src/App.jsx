@@ -782,7 +782,6 @@ export default function App() {
             seasonActualTotal={seasonActualTotal}
             vsPlanTotalPct={vsPlanTotalPct}
             yoyTotalPct={yoyTotalPct}
-            prevYearSeason={prevYearSeason}
             showInactive={showInactive}
             setShowInactive={setShowInactive}
             setEntry={setEntry}
@@ -853,9 +852,12 @@ export default function App() {
 
 function TablePane({
   sortedSeasons, seasonId, setSeasonId, currentSeason, rows, orders,
-  seasonPlanTotal, seasonActualTotal, vsPlanTotalPct, yoyTotalPct, prevYearSeason,
+  seasonPlanTotal, seasonActualTotal, vsPlanTotalPct, yoyTotalPct,
   showInactive, setShowInactive, setEntry,
 }) {
+  const yoyLabel = currentSeason
+    ? `vs${String((currentSeason.year - 1) % 100).padStart(2, "0")}${currentSeason.type}`
+    : "YoY";
   return (
     <div className="bbp-pane">
       <header className="bbp-pane-head">
@@ -885,7 +887,7 @@ function TablePane({
           tone={vsPlanTotalPct === null ? "neutral" : vsPlanTotalPct >= 0 ? "positive" : "negative"}
         />
         <SummaryCard
-          label={prevYearSeason ? `YoY (${prevYearSeason.label})` : "YoY (no prior-year data)"}
+          label={yoyLabel}
           value={fmtPct(yoyTotalPct)}
           tone={yoyTotalPct === null ? "neutral" : yoyTotalPct >= 0 ? "positive" : "negative"}
         />
@@ -906,7 +908,7 @@ function TablePane({
               <th>Actual<br />JPY</th>
               <th>Actual<br />Share</th>
               <th>vs Plan</th>
-              <th>YoY</th>
+              <th>{yoyLabel}</th>
             </tr>
           </thead>
           <tbody>
@@ -2667,7 +2669,7 @@ function Style() {
       .bbp-ordlcard--compact .bbp-ordlcard-deliv { gap: 6px; }
       .bbp-ordlcard--compact .bbp-ordlcard-delivitem span { font-size: 7.5px; }
       .bbp-ordlcard--compact .bbp-ordlcard-delivitem strong { font-size: 11px; }
-      .bbp-ordlcard--compact .bbp-sizechiprow { gap: 3px; max-width: 260px; }
+      .bbp-ordlcard--compact .bbp-sizechiprow { gap: 3px; flex-wrap: nowrap; overflow: hidden; }
       .bbp-ordlcard--compact .bbp-sizechip { min-width: 22px; padding: 2px 4px; }
       .bbp-ordlcard--compact .bbp-sizechip-label { font-size: 6px; }
       .bbp-ordlcard--compact .bbp-sizechip-qty { font-size: 9.5px; }
