@@ -607,7 +607,7 @@ export default function App() {
   const seasonActualTotal = rows.reduce((s, r) => s + r.actualJPY, 0);
   const seasonYoyTotal = rows.reduce((s, r) => s + (r.yoyActualJPY || 0), 0);
   const vsPlanTotalPct = seasonPlanTotal ? seasonActualTotal / seasonPlanTotal - 1 : null;
-  const yoyTotalPct = seasonYoyTotal ? seasonActualTotal / seasonYoyTotal - 1 : null;
+  const yoyTotalPct = seasonYoyTotal ? seasonActualTotal / seasonYoyTotal : null;
 
   /* ---- dashboard aggregates across all seasons ---- */
   const trend = useMemo(() => {
@@ -856,7 +856,12 @@ function TablePane({
   showInactive, setShowInactive, setEntry,
 }) {
   const yoyLabel = currentSeason
-    ? `vs${String((currentSeason.year - 1) % 100).padStart(2, "0")}${currentSeason.type}`
+    ? (
+      <>
+        <span style={{ textTransform: "lowercase" }}>vs</span>
+        {String((currentSeason.year - 1) % 100).padStart(2, "0")}{currentSeason.type}
+      </>
+    )
     : "YoY";
   return (
     <div className="bbp-pane">
@@ -889,7 +894,7 @@ function TablePane({
         <SummaryCard
           label={yoyLabel}
           value={fmtPct(yoyTotalPct)}
-          tone={yoyTotalPct === null ? "neutral" : yoyTotalPct >= 0 ? "positive" : "negative"}
+          tone={yoyTotalPct === null ? "neutral" : yoyTotalPct >= 1 ? "positive" : "negative"}
         />
       </div>
 
@@ -917,7 +922,7 @@ function TablePane({
               const planShare = seasonPlanTotal ? r.planJPY / seasonPlanTotal : null;
               const share = seasonActualTotal ? r.actualJPY / seasonActualTotal : null;
               const vsPlan = r.planJPY ? r.actualJPY / r.planJPY - 1 : null;
-              const yoy = r.yoyActualJPY ? r.actualJPY / r.yoyActualJPY - 1 : null;
+              const yoy = r.yoyActualJPY ? r.actualJPY / r.yoyActualJPY : null;
               return (
                 <tr key={r.brand.id} className={r.brand.active ? "" : "bbp-row--inactive"}>
                   <td className="bbp-td-brand">{r.brand.name}</td>
@@ -978,7 +983,7 @@ function TablePane({
                     {vsPlan === null ? "—" : <Pill tone={vsPlan >= 0 ? "positive" : "negative"}>{fmtPct(vsPlan)}</Pill>}
                   </td>
                   <td className="bbp-td-num">
-                    {yoy === null ? "—" : <Pill tone={yoy >= 0 ? "positive" : "negative"}>{fmtPct(yoy)}</Pill>}
+                    {yoy === null ? "—" : <Pill tone={yoy >= 1 ? "positive" : "negative"}>{fmtPct(yoy)}</Pill>}
                   </td>
                 </tr>
               );
