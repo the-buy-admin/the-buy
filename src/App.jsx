@@ -581,7 +581,15 @@ export default function App() {
     if (!masters || !currentSeason) return [];
     return activeBrands.map((b) => {
       const cur = currencyMap[b.currency] || { code: b.currency };
-      const plan = getEntry(b.id, currentSeason.id, "plan");
+      let plan = getEntry(b.id, currentSeason.id, "plan");
+      if (prevYearSeason && (plan.local === undefined || plan.rate === undefined)) {
+        const prevPlan = getEntry(b.id, prevYearSeason.id, "plan");
+        plan = {
+          ...plan,
+          local: plan.local !== undefined ? plan.local : prevPlan.local,
+          rate: plan.rate !== undefined ? plan.rate : prevPlan.rate,
+        };
+      }
       const manualActual = getEntry(b.id, currentSeason.id, "actual");
       const rollup = rollupOrdersForBrandSeason(orders, b.id, currentSeason.id);
       const actual = rollup ? { local: Math.round(rollup.local), rate: rollup.rate } : manualActual;
