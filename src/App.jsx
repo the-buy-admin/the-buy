@@ -2685,9 +2685,6 @@ function Style() {
       .bbp-ordlcard--compact .bbp-ordlcard-numitem span { font-size: 7px; }
       .bbp-ordlcard--compact .bbp-ordlcard-numitem strong { font-size: 10px; }
       .bbp-ordlcard--compact .bbp-ordlcard-memo { font-size: 9px; }
-      @media print {
-        .bbp-ordlist--compact > .bbp-ordlcard--compact:nth-child(5n) { break-after: page; }
-      }
 
       /* Export / Print preview */
       .bbp-exportpreview { background: var(--surface); border: 1px solid var(--line); padding: 40px 44px; margin-bottom: 40px; }
@@ -2741,6 +2738,7 @@ function Style() {
         .bbp-masterrow { flex-wrap: wrap; }
       }
 
+      @page { size: A4; margin: 14mm; }
       @media print {
         .bbp-side, .bbp-noprint { display: none !important; }
         .bbp-main { padding: 0 !important; }
