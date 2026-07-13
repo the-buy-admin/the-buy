@@ -23,11 +23,11 @@ const DEFAULT_CURRENCIES = [
 ];
 
 // ---- Order-entry (Orders tab) constants ----
-const SIZE_SYSTEMS = {
-  "letter": ["XXS", "XS", "S", "M", "L", "OS"],
-  "eu-even": ["44", "46", "48", "50", "52", "OS"],
-  "eu-odd": ["41", "42", "43", "44", "45", "46"],
-};
+const DEFAULT_SIZE_SYSTEMS = [
+  { id: "letter", label: "Letter (XXS–OS)", sizesText: "XXS,XS,S,M,L,OS" },
+  { id: "eu-even", label: "EU Even (44–OS)", sizesText: "44,46,48,50,52,OS" },
+  { id: "eu-odd", label: "EU Odd (41–46)", sizesText: "41,42,43,44,45,46" },
+];
 const ITEM_TYPES = ["BL", "JK", "SK", "CO", "PT", "TP", "VT", "OP", "OT"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DEFAULT_RATES = { EUR: 165, GBP: 195, USD: 150, PLN: 40, JPY: 1 };
@@ -78,11 +78,13 @@ async function loadOrderImages(id) {
   return blank;
 }
 
-function getOrderSizeList(form) {
+function getOrderSizeList(form, sizeSystems = DEFAULT_SIZE_SYSTEMS) {
   if (form.sizeSystem === "custom") {
     return (form.customSizes || "").split(",").map((s) => s.trim()).filter(Boolean);
   }
-  return SIZE_SYSTEMS[form.sizeSystem] || SIZE_SYSTEMS.letter;
+  const match = sizeSystems.find((sys) => sys.id === form.sizeSystem);
+  const text = match ? match.sizesText : sizeSystems[0]?.sizesText;
+  return (text || "").split(",").map((s) => s.trim()).filter(Boolean);
 }
 
 // Union of every size key used across a set of orders, ordered sensibly:
@@ -764,6 +766,38 @@ export default function App() {
       return { ...m, itemTypes: current.filter((_, i) => i !== index) };
     });
   };
+  const addSizeSystem = () => {
+    setModal({
+      type: "form",
+      title: "Add Size System",
+      confirmLabel: "Add",
+      fields: [
+        { key: "label", label: "Label", placeholder: "e.g. UK Sizes" },
+        { key: "sizesText", label: "Sizes (comma-separated)", placeholder: "e.g. 6,8,10,12,14" },
+      ],
+      onConfirm: (vals) => {
+        const label = (vals.label || "").trim();
+        const sizesText = (vals.sizesText || "").trim();
+        if (!label || !sizesText) return;
+        setMasters((m) => {
+          const current = m.sizeSystems || DEFAULT_SIZE_SYSTEMS;
+          return { ...m, sizeSystems: [...current, { id: uid(), label, sizesText }] };
+        });
+      },
+    });
+  };
+  const updateSizeSystem = (id, patch) => {
+    setMasters((m) => {
+      const current = m.sizeSystems || DEFAULT_SIZE_SYSTEMS;
+      return { ...m, sizeSystems: current.map((sys) => (sys.id === id ? { ...sys, ...patch } : sys)) };
+    });
+  };
+  const removeSizeSystem = (id) => {
+    setMasters((m) => {
+      const current = m.sizeSystems || DEFAULT_SIZE_SYSTEMS;
+      return { ...m, sizeSystems: current.filter((sys) => sys.id !== id) };
+    });
+  };
 
   if (loadError) {
     return <div className="bbp-root"><div className="bbp-error">Failed to load data. Please reload the page.</div></div>;
@@ -890,6 +924,9 @@ export default function App() {
             addItemType={addItemType}
             updateItemType={updateItemType}
             removeItemType={removeItemType}
+            addSizeSystem={addSizeSystem}
+            updateSizeSystem={updateSizeSystem}
+            removeSizeSystem={removeSizeSystem}
           />
         )}
       </main>
@@ -1181,6 +1218,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
     wsplb: true, erp: true, rp: true, rate: true, cost: true, markup: true, lts: true, memo: true,
   });
   const toggleCol = (key) => setVisibleCols((v) => ({ ...v, [key]: !v[key] }));
+  const sizeSystems = masters.sizeSystems || DEFAULT_SIZE_SYSTEMS;
 
   const exportOrders = useMemo(
     () => orders.filter((o) => o.brandId === exportBrandId && o.seasonId === exportSeasonId),
@@ -1356,7 +1394,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
     [orders, filterBrandId]
   );
 
-  const sizeList = getOrderSizeList(form);
+  const sizeList = getOrderSizeList(form, sizeSystems);
 
   if (view === "export") {
     const brand = brandMap[exportBrandId];
@@ -1610,39 +1648,19 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                           </div>
                         </div>
 
-                        {swatches.length > 0 && (
-                          <div className="bbp-ordlcard-swatchrow">
-                            {swatches.map((s) => (
-                              <div className="bbp-ordlcard-swatch" key={s.key}>
-                                <div className="bbp-ordlcard-swatch-label">{s.label}</div>
-                                <div className="bbp-ordlcard-swatch-img">
-                                  {s.img
-                                    ? <img src={s.img} alt="" onClick={() => setLightbox(s.img)} />
-                                    : <div className="bbp-ordlcard-noimg">No Photo</div>}
-                                </div>
-                                <div className="bbp-ordlcard-swatch-txt">{s.text || "—"}</div>
+                        <div className="bbp-ordlcard-swatchrow">
+                          {swatches.map((s) => (
+                            <div className="bbp-ordlcard-swatch" key={s.key}>
+                              <div className="bbp-ordlcard-swatch-label">{s.label}</div>
+                              <div className="bbp-ordlcard-swatch-img">
+                                {s.img
+                                  ? <img src={s.img} alt="" onClick={() => setLightbox(s.img)} />
+                                  : <div className="bbp-ordlcard-noimg">No Photo</div>}
                               </div>
-                            ))}
-                          </div>
-                        )}
-
-                        <div className="bbp-sizechipwrap">
-                          <div className="bbp-sizechiprow">
-                            {sizeCols.map((s) => {
-                              const qty = Number(o.sizes?.[s]) || 0;
-                              return (
-                                <div className="bbp-sizechip" key={s}>
-                                  <span className="bbp-sizechip-label">{s}</span>
-                                  <span className="bbp-sizechip-qty">{qty > 0 ? qty : "—"}</span>
-                                </div>
-                              );
-                            })}
-                            <div className="bbp-sizechip bbp-sizechip--total">
-                              <span className="bbp-sizechip-label">Total</span>
-                              <span className="bbp-sizechip-qty">{o.totalUnits || 0}</span>
+                              <div className="bbp-ordlcard-swatch-txt">{s.text || "—"}</div>
                             </div>
-                          </div>
-                          <div className="bbp-ordlcard-wspstack">
+                          ))}
+                          <div className="bbp-ordlcard-numpanel">
                             <div className="bbp-ordlcard-numitem">
                               <span>{wsp.label}</span>
                               <strong>{wsp.value}</strong>
@@ -1651,16 +1669,29 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                               <span>{totalWsp.label}</span>
                               <strong>{totalWsp.value}</strong>
                             </div>
+                            {numItems.map((n) => (
+                              <div className="bbp-ordlcard-numitem" key={n.key}>
+                                <span>{n.label}</span>
+                                <strong>{n.value}</strong>
+                              </div>
+                            ))}
                           </div>
                         </div>
 
-                        <div className="bbp-ordlcard-nums bbp-ordlcard-nums--flex">
-                          {numItems.map((n) => (
-                            <div className="bbp-ordlcard-numitem" key={n.key}>
-                              <span>{n.label}</span>
-                              <strong>{n.value}</strong>
-                            </div>
-                          ))}
+                        <div className="bbp-sizechiprow">
+                          {sizeCols.map((s) => {
+                            const qty = Number(o.sizes?.[s]) || 0;
+                            return (
+                              <div className="bbp-sizechip" key={s}>
+                                <span className="bbp-sizechip-label">{s}</span>
+                                <span className="bbp-sizechip-qty">{qty > 0 ? qty : "—"}</span>
+                              </div>
+                            );
+                          })}
+                          <div className="bbp-sizechip bbp-sizechip--total">
+                            <span className="bbp-sizechip-label">Total</span>
+                            <span className="bbp-sizechip-qty">{o.totalUnits || 0}</span>
+                          </div>
                         </div>
 
                         {o.note && <div className="bbp-ordlcard-memo">Note: {o.note}</div>}
@@ -1813,9 +1844,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
             <div className="bbp-field">
               <label>Size System</label>
               <select className="bbp-select" value={form.sizeSystem} onChange={(e) => setForm((f) => ({ ...f, sizeSystem: e.target.value }))}>
-                <option value="letter">Letter (XXS–OS)</option>
-                <option value="eu-even">EU Even (44–OS)</option>
-                <option value="eu-odd">EU Odd (41–46)</option>
+                {sizeSystems.map((sys) => <option key={sys.id} value={sys.id}>{sys.label}</option>)}
                 <option value="custom">Custom</option>
               </select>
             </div>
@@ -1904,7 +1933,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
         <div className="bbp-ordlist">
           {visibleOrders.map((o) => {
             const imgs = listImages[o.id] || {};
-            const orderSizeList = getOrderSizeList(o);
+            const orderSizeList = getOrderSizeList(o, sizeSystems);
             const swatches = [
               (o.fabric || imgs.imgFabric) && { key: "fabric", label: "Main Fabric", img: imgs.imgFabric, text: o.fabric },
               ...["acc1", "acc2", "acc3", "acc4"].map((key) => {
@@ -1944,21 +1973,53 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                     </div>
                   </div>
 
-                  {swatches.length > 0 && (
-                    <div className="bbp-ordlcard-swatchrow">
-                      {swatches.map((s) => (
-                        <div className="bbp-ordlcard-swatch" key={s.key}>
-                          <div className="bbp-ordlcard-swatch-label">{s.label}</div>
-                          <div className="bbp-ordlcard-swatch-img">
-                            {s.img
-                              ? <img src={s.img} alt="" onClick={() => setLightbox(s.img)} />
-                              : <div className="bbp-ordlcard-noimg">No Photo</div>}
-                          </div>
-                          <div className="bbp-ordlcard-swatch-txt">{s.text || "—"}</div>
+                  <div className="bbp-ordlcard-swatchrow">
+                    {swatches.map((s) => (
+                      <div className="bbp-ordlcard-swatch" key={s.key}>
+                        <div className="bbp-ordlcard-swatch-label">{s.label}</div>
+                        <div className="bbp-ordlcard-swatch-img">
+                          {s.img
+                            ? <img src={s.img} alt="" onClick={() => setLightbox(s.img)} />
+                            : <div className="bbp-ordlcard-noimg">No Photo</div>}
                         </div>
-                      ))}
+                        <div className="bbp-ordlcard-swatch-txt">{s.text || "—"}</div>
+                      </div>
+                    ))}
+                    <div className="bbp-ordlcard-numpanel">
+                      <div className="bbp-ordlcard-numitem">
+                        <span>WSP</span>
+                        <strong>{o.wsp ? `${o.currency === "JPY" ? "¥" : o.currency + " "}${fmtJPY(o.wsp)}` : "—"}</strong>
+                      </div>
+                      <div className="bbp-ordlcard-numitem">
+                        <span>RP</span>
+                        <strong>{o.rp ? `¥${fmtJPY(o.rp)}` : "—"}</strong>
+                      </div>
+                      <div className="bbp-ordlcard-numitem">
+                        <span>Total WSP ({o.currency})</span>
+                        <strong>{o.totalWSP ? `${o.currency === "JPY" ? "¥" : o.currency + " "}${fmtJPY(o.totalWSP)}` : "—"}</strong>
+                      </div>
+                      <div className="bbp-ordlcard-numitem">
+                        <span>Total WSP+IPC (JPY)</span>
+                        <strong>
+                          {o.totalWSPLB
+                            ? `¥${fmtJPY(o.totalWSPLB * (o.currency === "JPY" ? 1 : (Number(o.exrate) || 0)))}`
+                            : "—"}
+                        </strong>
+                      </div>
+                      <div className="bbp-ordlcard-numitem">
+                        <span>Total RP (JPY)</span>
+                        <strong>{o.erp ? `¥${fmtJPY(o.erp)}` : "—"}</strong>
+                      </div>
+                      <div className="bbp-ordlcard-numitem">
+                        <span>Mark up</span>
+                        <strong>{o.markup ? `${o.markup.toFixed(2)}x` : "—"}</strong>
+                      </div>
+                      <div className="bbp-ordlcard-numitem">
+                        <span>Cost %</span>
+                        <strong>{o.costPct ? `${o.costPct}%` : "—"}</strong>
+                      </div>
                     </div>
-                  )}
+                  </div>
 
                   <div className="bbp-sizechiprow">
                     {orderSizeList.map((s) => {
@@ -1973,43 +2034,6 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                     <div className="bbp-sizechip bbp-sizechip--total">
                       <span className="bbp-sizechip-label">Total</span>
                       <span className="bbp-sizechip-qty">{o.totalUnits || 0}</span>
-                    </div>
-                  </div>
-
-                  <div className="bbp-ordlcard-nums bbp-ordlcard-nums--5">
-                    <div className="bbp-ordlcard-numitem">
-                      <span>WSP</span>
-                      <strong>{o.wsp ? `${o.currency === "JPY" ? "¥" : o.currency + " "}${fmtJPY(o.wsp)}` : "—"}</strong>
-                    </div>
-                    <div className="bbp-ordlcard-numitem">
-                      <span>RP</span>
-                      <strong>{o.rp ? `¥${fmtJPY(o.rp)}` : "—"}</strong>
-                    </div>
-                    <div className="bbp-ordlcard-numitem">
-                      <span>Total WSP ({o.currency})</span>
-                      <strong>{o.totalWSP ? `${o.currency === "JPY" ? "¥" : o.currency + " "}${fmtJPY(o.totalWSP)}` : "—"}</strong>
-                    </div>
-                    <div className="bbp-ordlcard-numitem">
-                      <span>Total WSP+IPC (JPY)</span>
-                      <strong>
-                        {o.totalWSPLB
-                          ? `¥${fmtJPY(o.totalWSPLB * (o.currency === "JPY" ? 1 : (Number(o.exrate) || 0)))}`
-                          : "—"}
-                      </strong>
-                    </div>
-                    <div className="bbp-ordlcard-numitem">
-                      <span>Total RP (JPY)</span>
-                      <strong>{o.erp ? `¥${fmtJPY(o.erp)}` : "—"}</strong>
-                    </div>
-                  </div>
-                  <div className="bbp-ordlcard-nums bbp-ordlcard-nums--2">
-                    <div className="bbp-ordlcard-numitem">
-                      <span>Mark up</span>
-                      <strong>{o.markup ? `${o.markup.toFixed(2)}x` : "—"}</strong>
-                    </div>
-                    <div className="bbp-ordlcard-numitem">
-                      <span>Cost %</span>
-                      <strong>{o.costPct ? `${o.costPct}%` : "—"}</strong>
                     </div>
                   </div>
 
@@ -2366,8 +2390,10 @@ function MastersPane({
   masters, addBrand, updateBrand, removeBrand,
   addCurrency, removeCurrency, addSeason, removeSeason, sortedSeasons,
   addItemType, updateItemType, removeItemType,
+  addSizeSystem, updateSizeSystem, removeSizeSystem,
 }) {
   const itemTypes = masters.itemTypes || ITEM_TYPES;
+  const sizeSystems = masters.sizeSystems || DEFAULT_SIZE_SYSTEMS;
   return (
     <div className="bbp-pane">
       <header className="bbp-pane-head">
@@ -2451,6 +2477,32 @@ function MastersPane({
                 onChange={(e) => updateItemType(i, e.target.value)}
               />
               <button className="bbp-chipclose" onClick={() => removeItemType(i)}>×</button>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="bbp-mastersection">
+        <div className="bbp-mastersection-head">
+          <h2>Size Systems ({sizeSystems.length})</h2>
+          <button className="bbp-btn" onClick={addSizeSystem}>+ Add Size System</button>
+        </div>
+        <div className="bbp-masterlist">
+          {sizeSystems.map((sys) => (
+            <div key={sys.id} className="bbp-masterrow">
+              <input
+                className="bbp-input bbp-input--name"
+                value={sys.label}
+                onChange={(e) => updateSizeSystem(sys.id, { label: e.target.value })}
+              />
+              <input
+                className="bbp-input"
+                style={{ flex: 1, textAlign: "left" }}
+                value={sys.sizesText}
+                placeholder="e.g. XXS,XS,S,M,L,OS"
+                onChange={(e) => updateSizeSystem(sys.id, { sizesText: e.target.value })}
+              />
+              <button className="bbp-btn bbp-btn--ghost" onClick={() => removeSizeSystem(sys.id)}>Delete</button>
             </div>
           ))}
         </div>
@@ -2767,7 +2819,7 @@ function Style() {
 
       .bbp-ordlist { display: flex; flex-direction: column; gap: 16px; }
       .bbp-ordlcard {
-        display: flex; gap: 20px; background: var(--surface); border: 1px solid var(--line); padding: 18px;
+        display: flex; align-items: flex-start; gap: 20px; background: var(--surface); border: 1px solid var(--line); padding: 18px;
       }
       .bbp-ordlcard-photo { width: 160px; flex-shrink: 0; }
       .bbp-ordlcard-tag {
@@ -2799,9 +2851,6 @@ function Style() {
       }
       .bbp-ordlcard-delivitem strong { font-family: var(--font-mono); font-size: 13px; color: var(--ink); }
 
-      .bbp-sizechipwrap { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
-      .bbp-ordlcard-wspstack { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
-      .bbp-ordlcard-wspstack .bbp-ordlcard-numitem { flex-direction: row; gap: 6px; justify-content: flex-end; align-items: baseline; }
       .bbp-sizechiprow { display: flex; gap: 6px; flex-wrap: wrap; }
       .bbp-sizechip {
         display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 40px;
@@ -2812,18 +2861,18 @@ function Style() {
       .bbp-sizechip--total { background: var(--ink); border-color: var(--ink); }
       .bbp-sizechip--total .bbp-sizechip-label, .bbp-sizechip--total .bbp-sizechip-qty { color: var(--bg); }
 
-      .bbp-ordlcard-nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-      .bbp-ordlcard-nums--2 { grid-template-columns: repeat(2, 1fr); max-width: 260px; }
-      .bbp-ordlcard-nums--5 { grid-template-columns: repeat(5, 1fr); }
       .bbp-ordlcard-numitem { display: flex; flex-direction: column; gap: 2px; }
       .bbp-ordlcard-numitem span {
         font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft);
       }
       .bbp-ordlcard-numitem strong { font-family: var(--font-mono); font-size: 13px; color: var(--ink); }
       .bbp-ordlcard-memo { font-size: 11px; color: var(--ink-soft); font-style: italic; }
-      .bbp-ordlcard-nums--flex { display: flex; flex-wrap: wrap; gap: 14px 22px; }
 
       .bbp-ordlcard-swatchrow { display: flex; gap: 14px; flex-wrap: wrap; }
+      .bbp-ordlcard-numpanel {
+        flex: 1; min-width: 140px; display: grid; grid-template-columns: repeat(2, 1fr);
+        gap: 6px 16px; align-content: start;
+      }
       .bbp-ordlcard-swatch { width: 160px; flex-shrink: 0; }
       .bbp-ordlcard-swatch-label {
         font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 6px;
@@ -2856,7 +2905,7 @@ function Style() {
       .bbp-ordlcard--compact .bbp-ordlcard-deliv { gap: 6px; }
       .bbp-ordlcard--compact .bbp-ordlcard-delivitem span { font-size: 7.5px; }
       .bbp-ordlcard--compact .bbp-ordlcard-delivitem strong { font-size: 11px; }
-      .bbp-ordlcard--compact .bbp-sizechiprow { gap: 3px; flex-wrap: nowrap; overflow: hidden; flex: 1 1 auto; min-width: 0; }
+      .bbp-ordlcard--compact .bbp-sizechiprow { gap: 3px; flex-wrap: nowrap; overflow: hidden; }
       .bbp-ordlcard--compact .bbp-sizechip { min-width: 22px; padding: 2px 4px; }
       .bbp-ordlcard--compact .bbp-sizechip-label { font-size: 6px; }
       .bbp-ordlcard--compact .bbp-sizechip-qty { font-size: 9.5px; }
@@ -2865,7 +2914,7 @@ function Style() {
       .bbp-ordlcard--compact .bbp-ordlcard-swatch-label { font-size: 7px; margin-bottom: 3px; }
       .bbp-ordlcard--compact .bbp-ordlcard-swatch-img { width: 76px; height: 92px; margin-bottom: 3px; }
       .bbp-ordlcard--compact .bbp-ordlcard-swatch-txt { font-size: 8px; }
-      .bbp-ordlcard--compact .bbp-ordlcard-nums--flex { gap: 6px 16px; }
+      .bbp-ordlcard--compact .bbp-ordlcard-numpanel { gap: 4px 12px; }
       .bbp-ordlcard--compact .bbp-ordlcard-numitem span { font-size: 7px; }
       .bbp-ordlcard--compact .bbp-ordlcard-numitem strong { font-size: 10px; }
       .bbp-ordlcard--compact .bbp-ordlcard-memo { font-size: 9px; }
