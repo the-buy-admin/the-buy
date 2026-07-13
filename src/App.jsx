@@ -61,13 +61,11 @@ function splitOrderImages(obj) {
 
 async function saveOrderImages(id, images) {
   const hasAny = ORDER_IMAGE_FIELDS.some((k) => images[k]);
-  try {
-    if (hasAny) {
-      await window.storage.set(`order-img:${id}`, JSON.stringify(images), false);
-    } else {
-      await window.storage.delete(`order-img:${id}`, false);
-    }
-  } catch (err) { /* best-effort; images are non-critical to save */ }
+  if (hasAny) {
+    await window.storage.set(`order-img:${id}`, JSON.stringify(images), false);
+  } else {
+    await window.storage.delete(`order-img:${id}`, false);
+  }
 }
 
 async function loadOrderImages(id) {
@@ -462,7 +460,7 @@ export default function App() {
         const hasInline = ORDER_IMAGE_FIELDS.some((k) => typeof ord[k] === "string" && ord[k].startsWith("data:"));
         if (hasInline) {
           const { rest, images } = splitOrderImages(ord);
-          await saveOrderImages(ord.id, images);
+          try { await saveOrderImages(ord.id, images); } catch (err) { /* best-effort one-time migration */ }
           migratedOrders.push(rest);
           migrated = true;
         } else {
@@ -1323,7 +1321,15 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
       erp: t.erp,
       markup: t.markup,
     };
-    await saveOrderImages(id, images);
+    try {
+      await saveOrderImages(id, images);
+    } catch (err) {
+      setModal({
+        type: "alert",
+        title: "Photos Didn't Save",
+        message: `The order's other details were saved, but its photos could not be (${err && err.message ? err.message : "unknown error"}). This usually means the combined photos are too large - try removing one or two and saving again.`,
+      });
+    }
     setOrders((prev) => {
       if (editingId) return prev.map((o) => (o.id === editingId ? record : o));
       return [...prev, record];
@@ -1340,7 +1346,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
       confirmLabel: "Delete",
       onConfirm: () => {
         setOrders((prev) => prev.filter((o) => o.id !== id));
-        saveOrderImages(id, {});
+        saveOrderImages(id, {}).catch(() => { /* best-effort cleanup */ });
       },
     });
   };
