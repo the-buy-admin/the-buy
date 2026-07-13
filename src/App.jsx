@@ -1916,7 +1916,10 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                         {brandMap[o.brandId]?.name || "—"} · {seasonMap[o.seasonId]?.label || "—"}
                       </div>
                       <div className="bbp-ordlcard-model">{o.model || "—"}</div>
-                      <div className="bbp-ordlcard-fabric">{o.fabric || "—"}</div>
+                      <div className="bbp-ordlcard-fabric">
+                        {imgs.imgFabric && <img className="bbp-exportimg-inline" src={imgs.imgFabric} alt="" onClick={() => setLightbox(imgs.imgFabric)} />}
+                        {o.fabric || "—"}
+                      </div>
                       <div className="bbp-ordlcard-color">{o.color || "—"}</div>
                     </div>
                     <div className="bbp-ordlcard-deliv">
@@ -2810,7 +2813,7 @@ function Style() {
         border: 1px solid var(--line); padding: 4px 8px 4px 4px; max-width: 220px;
       }
       .bbp-exportimg-inline {
-        display: inline-block; width: 22px; height: 22px; object-fit: cover; vertical-align: middle;
+        display: inline-block; width: 90px; height: 90px; object-fit: cover; vertical-align: middle;
         margin-right: 6px; border: 1px solid var(--line); cursor: zoom-in;
       }
 
