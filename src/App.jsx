@@ -101,6 +101,20 @@ function sortSizeKeys(all) {
   return [...letters, ...numeric, ...rest];
 }
 
+// Short brand code for PO numbers: initials of each word for multi-word
+// names (e.g. "Bourrienne Paris X" -> "BPX"), or the first 3 letters for a
+// single-word name (e.g. "nitto" -> "NIT"). Collisions between brands are
+// resolved by the caller.
+function brandInitials(name) {
+  const words = (String(name || "")).split(/\s+/).filter(Boolean);
+  if (words.length > 1) {
+    return words
+      .map((w) => (w.match(/[A-Za-z0-9]/) || [""])[0].toUpperCase())
+      .join("");
+  }
+  return (words[0] || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 3).toUpperCase();
+}
+
 function collectSizeColumns(ordersList) {
   const seen = new Set();
   (ordersList || []).forEach((o) => {
@@ -1167,6 +1181,22 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
   }, [orders]);
   const toggleExportCol = (key) => setExportCols((c) => ({ ...c, [key]: !c[key] }));
 
+  // Short, unique per-brand code used in PO numbers (e.g. "BPX"). Collisions
+  // (two brands landing on the same code) get a numeric suffix in brand order.
+  const brandCodeMap = useMemo(() => {
+    const map = {};
+    const used = new Set();
+    masters.brands.forEach((b) => {
+      const base = brandInitials(b.name) || "X";
+      let code = base;
+      let n = 2;
+      while (used.has(code)) { code = `${base}${n}`; n++; }
+      used.add(code);
+      map[b.id] = code;
+    });
+    return map;
+  }, [masters.brands]);
+
   // Auto-numbered purchase orders: one counter per brand+season, bumped each
   // time a document is actually issued (Excel/PDF), so re-issuing a revision
   // the same day still gets a distinct, traceable number.
@@ -1181,8 +1211,11 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
   }, []);
   const poKey = `${exportBrandId}|${exportSeasonId}`;
   const poNextRev = (poNumbers[poKey] || 0) + 1;
-  const poNumber = (brandForPo, seasonForPo, rev) =>
-    `${seasonForPo?.year ?? ""}${seasonForPo?.type ?? ""}-${(brandForPo?.id || "").toUpperCase()}-R${String(rev).padStart(2, "0")}`;
+  const poNumber = (brandForPo, seasonForPo, rev) => {
+    const yy = seasonForPo ? String(seasonForPo.year % 100).padStart(2, "0") : "";
+    const code = brandCodeMap[brandForPo?.id] || "";
+    return `${yy}${seasonForPo?.type ?? ""}-${code}-${String(rev).padStart(2, "0")}`;
+  };
   const issuePoNumber = async () => {
     const updated = { ...poNumbers, [poKey]: poNextRev };
     setPoNumbers(updated);
@@ -1438,10 +1471,11 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
           <div className="bbp-exportheader">
             <div className="bbp-exportbrandrow">
               <img className="bbp-exportlogo" src={`${import.meta.env.BASE_URL}logo-to.png`} alt="T.O" />
-              <div>
-                <div className="bbp-exportbrand">{brand?.name || "—"}</div>
-                <div className="bbp-exportsub">{season?.label || "—"} · PURCHASE ORDER</div>
-              </div>
+              <div className="bbp-exportdoctype">Purchase Order</div>
+            </div>
+            <div className="bbp-exportheader-center">
+              <div className="bbp-exportbrand">{brand?.name || "—"}</div>
+              <div className="bbp-exportsub">{season?.label || "—"}</div>
             </div>
             <div className="bbp-exportmeta">
               <div>PO#: {poNumber(brand, season, poNextRev)}</div>
@@ -1456,8 +1490,9 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
             <div className="bbp-exportinfo-col">
               <div className="bbp-exportinfo-label">Ordered by</div>
               <div>T.O Company</div>
-              <div>Shinya Okazaki (Head of Buying)</div>
+              <div>Contact: Shinya Okazaki</div>
               <div>okazaki@to1981.com</div>
+              <div>+81-90-8281-1250</div>
             </div>
             <div className="bbp-exportinfo-col">
               <div className="bbp-exportinfo-label">Ship to</div>
@@ -1467,9 +1502,12 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
             </div>
             <div className="bbp-exportinfo-col">
               <div className="bbp-exportinfo-label">Shipping / Export</div>
-              <div>担当 Saki Sugimura</div>
+              <div>Contact: Saki Sugimura</div>
               <div>saki@to1981.com</div>
               <div>+81 90 9770 3174</div>
+            </div>
+            <div className="bbp-exportinfo-col">
+              <div className="bbp-exportinfo-label">Courier Accounts</div>
               <div>DHL Account: 588199549</div>
               <div>UPS Account: A9998E</div>
             </div>
@@ -1496,7 +1534,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                   return (
                     <div className="bbp-ordlcard bbp-ordlcard--compact" key={o.id}>
                       <div className="bbp-ordlcard-photo">
-                        <div className="bbp-ordlcard-tag">・{o.item}</div>
+                        <div className="bbp-ordlcard-tag">#{i + 1}</div>
                         <div className="bbp-ordlcard-img">
                           {imgs.imgModel
                             ? <img src={imgs.imgModel} alt="" onClick={() => setLightbox(imgs.imgModel)} />
@@ -1507,7 +1545,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                       <div className="bbp-ordlcard-body">
                         <div className="bbp-ordlcard-toprow">
                           <div className="bbp-ordlcard-info">
-                            <div className="bbp-ordlcard-eyebrow">#{i + 1}</div>
+                            <div className="bbp-ordlcard-eyebrow">{o.item}</div>
                             <div className="bbp-ordlcard-model">{o.model || "—"}</div>
                             <div className="bbp-ordlcard-fabric">
                               {imgs.imgFabric && <img className="bbp-exportimg-inline" src={imgs.imgFabric} alt="" onClick={() => setLightbox(imgs.imgFabric)} />}
@@ -2701,7 +2739,7 @@ function Style() {
         gap: 16px; padding: 13px 0; background: transparent; border: none; border-bottom: 1px solid var(--line);
       }
       .bbp-ordlcard--compact .bbp-ordlcard-photo { width: 64px; }
-      .bbp-ordlcard--compact .bbp-ordlcard-tag { font-size: 8px; padding-bottom: 3px; margin-bottom: 4px; }
+      .bbp-ordlcard--compact .bbp-ordlcard-tag { font-size: 11px; font-weight: 700; color: var(--ink); padding-bottom: 3px; margin-bottom: 4px; }
       .bbp-ordlcard--compact .bbp-ordlcard-img { width: 64px; height: 78px; }
       .bbp-ordlcard--compact .bbp-ordlcard-body { gap: 6px; }
       .bbp-ordlcard--compact .bbp-ordlcard-eyebrow { font-size: 8px; margin-bottom: 1px; }
@@ -2725,20 +2763,28 @@ function Style() {
 
       /* Export / Print preview */
       .bbp-exportpreview { background: var(--surface); border: 1px solid var(--line); padding: 40px 44px; margin-bottom: 40px; }
-      .bbp-exportheader { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid var(--ink); padding-bottom: 18px; margin-bottom: 22px; }
-      .bbp-exportbrand { font-family: var(--font-serif); font-size: 22px; font-weight: 500; letter-spacing: 0.02em; }
-      .bbp-exportsub { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft); margin-top: 6px; }
-      .bbp-exportmeta { text-align: right; font-family: var(--font-mono); font-size: 10px; color: var(--ink-soft); line-height: 1.9; }
-      .bbp-exportbrandrow { display: flex; align-items: center; gap: 16px; }
-      .bbp-exportlogo { height: 40px; width: auto; object-fit: contain; flex-shrink: 0; filter: grayscale(1); }
+      .bbp-exportheader {
+        display: grid; grid-template-columns: 1fr auto 1fr; align-items: start; gap: 16px;
+        border-bottom: 2px solid var(--ink); padding-bottom: 10px; margin-bottom: 12px;
+      }
+      .bbp-exportheader-center { text-align: center; align-self: end; }
+      .bbp-exportbrand { font-family: var(--font-serif); font-size: 14px; font-weight: 400; letter-spacing: 0.01em; color: var(--ink-soft); }
+      .bbp-exportsub { font-size: 8.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft); margin-top: 2px; }
+      .bbp-exportmeta { text-align: right; font-family: var(--font-mono); font-size: 10px; color: var(--ink-soft); line-height: 1.4; }
+      .bbp-exportdoctype {
+        font-family: var(--font-sans); font-size: 12px; font-weight: 600; letter-spacing: 0.06em;
+        text-transform: uppercase; color: var(--ink); margin-top: 4px;
+      }
+      .bbp-exportbrandrow { display: flex; flex-direction: column; align-items: flex-start; gap: 0; }
+      .bbp-exportlogo { height: 22px; width: auto; object-fit: contain; flex-shrink: 0; }
       .bbp-exportinfo {
-        display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
-        margin-bottom: 26px; padding-bottom: 18px; border-bottom: 1px solid var(--line);
-        font-size: 10.5px; line-height: 1.6; color: var(--ink-soft);
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: 28px;
+        margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--line);
+        font-size: 10.5px; line-height: 1.5; color: var(--ink-soft);
       }
       .bbp-exportinfo-label {
         font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink);
-        font-weight: 600; margin-bottom: 4px;
+        font-weight: 600; margin-bottom: 3px;
       }
       .bbp-exporttotals {
         display: flex; justify-content: flex-end; gap: 24px; margin-top: 18px; padding-top: 14px;
