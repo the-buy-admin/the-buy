@@ -2857,6 +2857,9 @@ function Style() {
         .bbp-main { padding: 0 !important; }
         .bbp-exportpreview { border: none !important; padding: 12mm !important; }
         .bbp-ordlcard { break-inside: avoid; }
+        .bbp-exportpreview, .bbp-exportpreview * {
+          -webkit-print-color-adjust: exact; print-color-adjust: exact;
+        }
       }
     `}</style>
   );
