@@ -29,6 +29,7 @@ const DEFAULT_SIZE_SYSTEMS = [
   { id: "eu-odd", label: "EU Odd (41–46)", sizesText: "41,42,43,44,45,46" },
 ];
 const ITEM_TYPES = ["BL", "JK", "SK", "CO", "PT", "TP", "VT", "OP", "OT"];
+const CIRCLED_NUMBERS = ["①", "②", "③", "④", "⑤"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DEFAULT_RATES = { EUR: 165, GBP: 195, USD: 150, PLN: 40, JPY: 1 };
 
@@ -1596,21 +1597,23 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
               <div className="bbp-ordlist bbp-ordlist--compact">
                 {exportOrders.map((o, i) => {
                   const imgs = exportImages[o.id] || {};
-                  const swatches = [
-                    (o.fabric || imgs.imgFabric) && { key: "fabric", label: "Main Fabric", img: imgs.imgFabric, text: o.fabric },
-                    ...accCols.map((key) => {
+                  const swatchSlots = [
+                    { key: "fabric", label: "Main Fabric", img: imgs.imgFabric, text: o.fabric },
+                    ...["acc1", "acc2", "acc3", "acc4"].map((key) => {
                       const imgKey = "img" + key.charAt(0).toUpperCase() + key.slice(1);
-                      return (o[key] || imgs[imgKey]) && { key, label: `Accessories ${key.slice(3)}`, img: imgs[imgKey], text: o[key] };
+                      return { key, label: `Accessories ${key.slice(3)}`, img: imgs[imgKey], text: o[key] };
                     }),
-                  ].filter(Boolean);
-                  const wsp = { label: "WSP", value: o.wsp ? `${o.currency === "JPY" ? "¥" : o.currency + " "}${fmt2(o.wsp)}` : "—" };
-                  const totalWsp = { label: "Total WSP", value: o.totalWSP ? `${o.currency === "JPY" ? "¥" : o.currency + " "}${fmt2(o.totalWSP)}` : "—" };
-                  const numItems = [
-                    visibleCols.wsplb && { key: "wsplb", label: "Total WSP+IPC", value: o.totalWSPLB ? `${o.currency === "JPY" ? "¥" : o.currency + " "}${fmt2(o.totalWSPLB)}` : "—" },
-                    visibleCols.rp && { key: "rp", label: "RP", value: o.rp ? `¥${fmtJPY(o.rp)}` : "—" },
+                  ];
+                  const pricingItems = [
+                    { key: "wsp", label: "WSP", value: o.wsp ? `${o.currency === "JPY" ? "¥" : o.currency + " "}${fmt2(o.wsp)}` : "—" },
+                    { key: "totalwsp", label: "Total WSP", value: o.totalWSP ? `${o.currency === "JPY" ? "¥" : o.currency + " "}${fmt2(o.totalWSP)}` : "—" },
                     visibleCols.erp && { key: "erp", label: "TTL ERP", value: o.erp ? `¥${fmtJPY(o.erp)}` : "—" },
                     visibleCols.rate && { key: "rate", label: "Rate", value: o.exrate || "—" },
                     visibleCols.cost && { key: "cost", label: "Cost %", value: o.costPct ? `${o.costPct}%` : "—" },
+                  ].filter(Boolean);
+                  const retailItems = [
+                    visibleCols.rp && { key: "rp", label: "RP", value: o.rp ? `¥${fmtJPY(o.rp)}` : "—" },
+                    visibleCols.wsplb && { key: "wsplb", label: "Total WSP+IPC", value: o.totalWSPLB ? `${o.currency === "JPY" ? "¥" : o.currency + " "}${fmt2(o.totalWSPLB)}` : "—" },
                     visibleCols.markup && { key: "markup", label: "Mark Up", value: o.markup ? `${o.markup.toFixed(2)}x` : "—" },
                   ].filter(Boolean);
 
@@ -1626,14 +1629,73 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                       </div>
 
                       <div className="bbp-ordlcard-body">
-                        <div className="bbp-ordlcard-toprow">
-                          <div className="bbp-ordlcard-info">
+                        <div className="bbp-ordlcard-headrow">
+                          <div className="bbp-ordlcard-headtext">
                             <div className="bbp-ordlcard-eyebrow">{o.item}</div>
                             <div className="bbp-ordlcard-modelrow">
                               <span className="bbp-ordlcard-model">{o.model || "—"}</span>
                               <span className="bbp-ordlcard-color">{o.color || "—"}</span>
                             </div>
                           </div>
+                          <div className="bbp-sizechiprow">
+                            {sizeCols.map((s) => {
+                              const qty = Number(o.sizes?.[s]) || 0;
+                              return (
+                                <div className="bbp-sizechip" key={s}>
+                                  <span className="bbp-sizechip-label">{s}</span>
+                                  <span className="bbp-sizechip-qty">{qty > 0 ? qty : "—"}</span>
+                                </div>
+                              );
+                            })}
+                            <div className="bbp-sizechip bbp-sizechip--total">
+                              <span className="bbp-sizechip-label">Total</span>
+                              <span className="bbp-sizechip-qty">{o.totalUnits || 0}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="bbp-ordlcard-detailrow">
+                          <div className="bbp-ordlcard-detailcol bbp-ordlcard-detailcol--swatches">
+                            <div className="bbp-ordlcard-collabel">Details</div>
+                            <div className="bbp-ordlcard-swatchgrid">
+                              {swatchSlots.map((s, idx) => (
+                                <div className="bbp-ordlcard-swatch" key={s.key}>
+                                  <div className="bbp-ordlcard-swatch-img">
+                                    {s.img
+                                      ? <img src={s.img} alt="" onClick={() => setLightbox(s.img)} />
+                                      : <div className="bbp-ordlcard-noimg">No Photo</div>}
+                                  </div>
+                                  <div className="bbp-ordlcard-swatch-txt">
+                                    <span className="bbp-ordlcard-badge">{CIRCLED_NUMBERS[idx]}</span>
+                                    {s.text || "Additional Detail (Option)"}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="bbp-ordlcard-detailcol">
+                            <div className="bbp-ordlcard-collabel">Pricing</div>
+                            {pricingItems.map((n) => (
+                              <div className="bbp-ordlcard-numitem" key={n.key}>
+                                <span>{n.label}</span>
+                                <strong>{n.value}</strong>
+                              </div>
+                            ))}
+                          </div>
+
+                          {retailItems.length > 0 && (
+                            <div className="bbp-ordlcard-detailcol">
+                              <div className="bbp-ordlcard-collabel">Retail Price</div>
+                              {retailItems.map((n) => (
+                                <div className="bbp-ordlcard-numitem" key={n.key}>
+                                  <span>{n.label}</span>
+                                  <strong>{n.value}</strong>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
                           <div className="bbp-ordlcard-deliv">
                             <div className="bbp-ordlcard-delivitem">
                               <span>Delivery</span>
@@ -1645,52 +1707,6 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                                 <strong>{o.lts || "—"}</strong>
                               </div>
                             )}
-                          </div>
-                        </div>
-
-                        <div className="bbp-ordlcard-swatchrow">
-                          {swatches.map((s) => (
-                            <div className="bbp-ordlcard-swatch" key={s.key}>
-                              <div className="bbp-ordlcard-swatch-label">{s.label}</div>
-                              <div className="bbp-ordlcard-swatch-img">
-                                {s.img
-                                  ? <img src={s.img} alt="" onClick={() => setLightbox(s.img)} />
-                                  : <div className="bbp-ordlcard-noimg">No Photo</div>}
-                              </div>
-                              <div className="bbp-ordlcard-swatch-txt">{s.text || "—"}</div>
-                            </div>
-                          ))}
-                          <div className="bbp-ordlcard-numpanel">
-                            <div className="bbp-ordlcard-numitem">
-                              <span>{wsp.label}</span>
-                              <strong>{wsp.value}</strong>
-                            </div>
-                            <div className="bbp-ordlcard-numitem">
-                              <span>{totalWsp.label}</span>
-                              <strong>{totalWsp.value}</strong>
-                            </div>
-                            {numItems.map((n) => (
-                              <div className="bbp-ordlcard-numitem" key={n.key}>
-                                <span>{n.label}</span>
-                                <strong>{n.value}</strong>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="bbp-sizechiprow">
-                          {sizeCols.map((s) => {
-                            const qty = Number(o.sizes?.[s]) || 0;
-                            return (
-                              <div className="bbp-sizechip" key={s}>
-                                <span className="bbp-sizechip-label">{s}</span>
-                                <span className="bbp-sizechip-qty">{qty > 0 ? qty : "—"}</span>
-                              </div>
-                            );
-                          })}
-                          <div className="bbp-sizechip bbp-sizechip--total">
-                            <span className="bbp-sizechip-label">Total</span>
-                            <span className="bbp-sizechip-qty">{o.totalUnits || 0}</span>
                           </div>
                         </div>
 
@@ -1934,13 +1950,13 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
           {visibleOrders.map((o) => {
             const imgs = listImages[o.id] || {};
             const orderSizeList = getOrderSizeList(o, sizeSystems);
-            const swatches = [
-              (o.fabric || imgs.imgFabric) && { key: "fabric", label: "Main Fabric", img: imgs.imgFabric, text: o.fabric },
+            const swatchSlots = [
+              { key: "fabric", label: "Main Fabric", img: imgs.imgFabric, text: o.fabric },
               ...["acc1", "acc2", "acc3", "acc4"].map((key) => {
                 const imgKey = "img" + key.charAt(0).toUpperCase() + key.slice(1);
-                return (o[key] || imgs[imgKey]) && { key, label: `Accessories ${key.slice(3)}`, img: imgs[imgKey], text: o[key] };
+                return { key, label: `Accessories ${key.slice(3)}`, img: imgs[imgKey], text: o[key] };
               }),
-            ].filter(Boolean);
+            ];
             return (
               <div className="bbp-ordlcard" key={o.id}>
                 <div className="bbp-ordlcard-photo">
@@ -1953,50 +1969,78 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                 </div>
 
                 <div className="bbp-ordlcard-body">
-                  <div className="bbp-ordlcard-toprow">
-                    <div className="bbp-ordlcard-info">
+                  <div className="bbp-ordlcard-headrow">
+                    <div className="bbp-ordlcard-headtext">
                       <div className="bbp-ordlcard-eyebrow">
                         {brandMap[o.brandId]?.name || "—"} · {seasonMap[o.seasonId]?.label || "—"}
                       </div>
-                      <div className="bbp-ordlcard-model">{o.model || "—"}</div>
-                      <div className="bbp-ordlcard-color">{o.color || "—"}</div>
-                    </div>
-                    <div className="bbp-ordlcard-deliv">
-                      <div className="bbp-ordlcard-delivitem">
-                        <span>Delivery</span>
-                        <strong>{o.delivery || "—"}</strong>
+                      <div className="bbp-ordlcard-modelrow">
+                        <span className="bbp-ordlcard-model">{o.model || "—"}</span>
+                        <span className="bbp-ordlcard-color">{o.color || "—"}</span>
                       </div>
-                      <div className="bbp-ordlcard-delivitem">
-                        <span>LTS</span>
-                        <strong>{o.lts || "—"}</strong>
+                    </div>
+                    <div className="bbp-sizechiprow">
+                      {orderSizeList.map((s) => {
+                        const qty = Number(o.sizes?.[s]) || 0;
+                        return (
+                          <div className="bbp-sizechip" key={s}>
+                            <span className="bbp-sizechip-label">{s}</span>
+                            <span className="bbp-sizechip-qty">{qty > 0 ? qty : "—"}</span>
+                          </div>
+                        );
+                      })}
+                      <div className="bbp-sizechip bbp-sizechip--total">
+                        <span className="bbp-sizechip-label">Total</span>
+                        <span className="bbp-sizechip-qty">{o.totalUnits || 0}</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="bbp-ordlcard-swatchrow">
-                    {swatches.map((s) => (
-                      <div className="bbp-ordlcard-swatch" key={s.key}>
-                        <div className="bbp-ordlcard-swatch-label">{s.label}</div>
-                        <div className="bbp-ordlcard-swatch-img">
-                          {s.img
-                            ? <img src={s.img} alt="" onClick={() => setLightbox(s.img)} />
-                            : <div className="bbp-ordlcard-noimg">No Photo</div>}
-                        </div>
-                        <div className="bbp-ordlcard-swatch-txt">{s.text || "—"}</div>
+                  <div className="bbp-ordlcard-detailrow">
+                    <div className="bbp-ordlcard-detailcol bbp-ordlcard-detailcol--swatches">
+                      <div className="bbp-ordlcard-collabel">Details</div>
+                      <div className="bbp-ordlcard-swatchgrid">
+                        {swatchSlots.map((s, idx) => (
+                          <div className="bbp-ordlcard-swatch" key={s.key}>
+                            <div className="bbp-ordlcard-swatch-img">
+                              {s.img
+                                ? <img src={s.img} alt="" onClick={() => setLightbox(s.img)} />
+                                : <div className="bbp-ordlcard-noimg">No Photo</div>}
+                            </div>
+                            <div className="bbp-ordlcard-swatch-txt">
+                              <span className="bbp-ordlcard-badge">{CIRCLED_NUMBERS[idx]}</span>
+                              {s.text || "Additional Detail (Option)"}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                    <div className="bbp-ordlcard-numpanel">
+                    </div>
+
+                    <div className="bbp-ordlcard-detailcol">
+                      <div className="bbp-ordlcard-collabel">Pricing</div>
                       <div className="bbp-ordlcard-numitem">
                         <span>WSP</span>
                         <strong>{o.wsp ? `${o.currency === "JPY" ? "¥" : o.currency + " "}${fmtJPY(o.wsp)}` : "—"}</strong>
                       </div>
                       <div className="bbp-ordlcard-numitem">
-                        <span>RP</span>
-                        <strong>{o.rp ? `¥${fmtJPY(o.rp)}` : "—"}</strong>
-                      </div>
-                      <div className="bbp-ordlcard-numitem">
                         <span>Total WSP ({o.currency})</span>
                         <strong>{o.totalWSP ? `${o.currency === "JPY" ? "¥" : o.currency + " "}${fmtJPY(o.totalWSP)}` : "—"}</strong>
+                      </div>
+                      <div className="bbp-ordlcard-numitem">
+                        <span>Total RP (JPY)</span>
+                        <strong>{o.erp ? `¥${fmtJPY(o.erp)}` : "—"}</strong>
+                      </div>
+                      <div className="bbp-ordlcard-numitem">
+                        <span>Cost %</span>
+                        <strong>{o.costPct ? `${o.costPct}%` : "—"}</strong>
+                      </div>
+                    </div>
+
+                    <div className="bbp-ordlcard-detailcol">
+                      <div className="bbp-ordlcard-collabel">Retail Price</div>
+                      <div className="bbp-ordlcard-numitem">
+                        <span>RP</span>
+                        <strong>{o.rp ? `¥${fmtJPY(o.rp)}` : "—"}</strong>
                       </div>
                       <div className="bbp-ordlcard-numitem">
                         <span>Total WSP+IPC (JPY)</span>
@@ -2007,33 +2051,20 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                         </strong>
                       </div>
                       <div className="bbp-ordlcard-numitem">
-                        <span>Total RP (JPY)</span>
-                        <strong>{o.erp ? `¥${fmtJPY(o.erp)}` : "—"}</strong>
-                      </div>
-                      <div className="bbp-ordlcard-numitem">
                         <span>Mark up</span>
                         <strong>{o.markup ? `${o.markup.toFixed(2)}x` : "—"}</strong>
                       </div>
-                      <div className="bbp-ordlcard-numitem">
-                        <span>Cost %</span>
-                        <strong>{o.costPct ? `${o.costPct}%` : "—"}</strong>
-                      </div>
                     </div>
-                  </div>
 
-                  <div className="bbp-sizechiprow">
-                    {orderSizeList.map((s) => {
-                      const qty = Number(o.sizes?.[s]) || 0;
-                      return (
-                        <div className="bbp-sizechip" key={s}>
-                          <span className="bbp-sizechip-label">{s}</span>
-                          <span className="bbp-sizechip-qty">{qty > 0 ? qty : "—"}</span>
-                        </div>
-                      );
-                    })}
-                    <div className="bbp-sizechip bbp-sizechip--total">
-                      <span className="bbp-sizechip-label">Total</span>
-                      <span className="bbp-sizechip-qty">{o.totalUnits || 0}</span>
+                    <div className="bbp-ordlcard-deliv">
+                      <div className="bbp-ordlcard-delivitem">
+                        <span>Delivery</span>
+                        <strong>{o.delivery || "—"}</strong>
+                      </div>
+                      <div className="bbp-ordlcard-delivitem">
+                        <span>LTS</span>
+                        <strong>{o.lts || "—"}</strong>
+                      </div>
                     </div>
                   </div>
 
@@ -2835,8 +2866,8 @@ function Style() {
         font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft);
       }
       .bbp-ordlcard-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
-      .bbp-ordlcard-toprow { display: flex; justify-content: space-between; gap: 16px; }
-      .bbp-ordlcard-info { min-width: 0; }
+      .bbp-ordlcard-headrow { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+      .bbp-ordlcard-headtext { min-width: 0; }
       .bbp-ordlcard-eyebrow {
         font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 4px;
       }
@@ -2851,7 +2882,7 @@ function Style() {
       }
       .bbp-ordlcard-delivitem strong { font-family: var(--font-mono); font-size: 13px; color: var(--ink); }
 
-      .bbp-sizechiprow { display: flex; gap: 6px; flex-wrap: wrap; }
+      .bbp-sizechiprow { display: flex; gap: 6px; flex-wrap: wrap; flex-shrink: 0; }
       .bbp-sizechip {
         display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 40px;
         border: 1px solid var(--line); padding: 5px 8px; background: var(--bg);
@@ -2868,21 +2899,22 @@ function Style() {
       .bbp-ordlcard-numitem strong { font-family: var(--font-mono); font-size: 13px; color: var(--ink); }
       .bbp-ordlcard-memo { font-size: 11px; color: var(--ink-soft); font-style: italic; }
 
-      .bbp-ordlcard-swatchrow { display: flex; gap: 14px; flex-wrap: wrap; }
-      .bbp-ordlcard-numpanel {
-        flex: 1; min-width: 140px; display: grid; grid-template-columns: repeat(2, 1fr);
-        gap: 6px 16px; align-content: start;
+      .bbp-ordlcard-detailrow { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+      .bbp-ordlcard-detailcol { display: flex; flex-direction: column; gap: 8px; min-width: 100px; }
+      .bbp-ordlcard-detailcol--swatches { flex: 1; min-width: 200px; }
+      .bbp-ordlcard-collabel {
+        font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft);
+        font-weight: 600; padding-bottom: 4px; border-bottom: 1px solid var(--line);
       }
-      .bbp-ordlcard-swatch { width: 160px; flex-shrink: 0; }
-      .bbp-ordlcard-swatch-label {
-        font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 6px;
-      }
+      .bbp-ordlcard-swatchgrid { display: flex; gap: 12px; flex-wrap: wrap; }
+      .bbp-ordlcard-swatch { width: 130px; flex-shrink: 0; }
       .bbp-ordlcard-swatch-img {
-        width: 160px; height: 190px; border: 1px solid var(--line); background: var(--bg);
+        width: 130px; height: 155px; border: 1px solid var(--line); background: var(--bg);
         display: flex; align-items: center; justify-content: center; overflow: hidden; margin-bottom: 6px;
       }
       .bbp-ordlcard-swatch-img img { width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }
       .bbp-ordlcard-swatch-txt { font-size: 11px; color: var(--ink-soft); line-height: 1.4; }
+      .bbp-ordlcard-badge { font-family: var(--font-mono); color: var(--ink); font-weight: 600; margin-right: 4px; }
 
       .bbp-lightbox {
         position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85); display: flex; align-items: center;
@@ -2902,6 +2934,7 @@ function Style() {
       .bbp-ordlcard--compact .bbp-ordlcard-eyebrow { font-size: 8px; margin-bottom: 1px; }
       .bbp-ordlcard--compact .bbp-ordlcard-model { font-size: 13px; }
       .bbp-ordlcard--compact .bbp-ordlcard-color { font-size: 10px; margin-top: 0; }
+      .bbp-ordlcard--compact .bbp-ordlcard-headrow { gap: 10px; }
       .bbp-ordlcard--compact .bbp-ordlcard-deliv { gap: 6px; }
       .bbp-ordlcard--compact .bbp-ordlcard-delivitem span { font-size: 7.5px; }
       .bbp-ordlcard--compact .bbp-ordlcard-delivitem strong { font-size: 11px; }
@@ -2909,12 +2942,15 @@ function Style() {
       .bbp-ordlcard--compact .bbp-sizechip { min-width: 22px; padding: 2px 4px; }
       .bbp-ordlcard--compact .bbp-sizechip-label { font-size: 6px; }
       .bbp-ordlcard--compact .bbp-sizechip-qty { font-size: 9.5px; }
-      .bbp-ordlcard--compact .bbp-ordlcard-swatchrow { gap: 8px; }
+      .bbp-ordlcard--compact .bbp-ordlcard-detailrow { gap: 12px; }
+      .bbp-ordlcard--compact .bbp-ordlcard-detailcol { gap: 4px; min-width: 70px; }
+      .bbp-ordlcard--compact .bbp-ordlcard-detailcol--swatches { min-width: 160px; }
+      .bbp-ordlcard--compact .bbp-ordlcard-collabel { font-size: 7px; padding-bottom: 2px; }
+      .bbp-ordlcard--compact .bbp-ordlcard-swatchgrid { gap: 6px; }
       .bbp-ordlcard--compact .bbp-ordlcard-swatch { width: 76px; }
-      .bbp-ordlcard--compact .bbp-ordlcard-swatch-label { font-size: 7px; margin-bottom: 3px; }
       .bbp-ordlcard--compact .bbp-ordlcard-swatch-img { width: 76px; height: 92px; margin-bottom: 3px; }
       .bbp-ordlcard--compact .bbp-ordlcard-swatch-txt { font-size: 8px; }
-      .bbp-ordlcard--compact .bbp-ordlcard-numpanel { gap: 4px 12px; }
+      .bbp-ordlcard--compact .bbp-ordlcard-badge { font-size: 8px; }
       .bbp-ordlcard--compact .bbp-ordlcard-numitem span { font-size: 7px; }
       .bbp-ordlcard--compact .bbp-ordlcard-numitem strong { font-size: 10px; }
       .bbp-ordlcard--compact .bbp-ordlcard-memo { font-size: 9px; }
