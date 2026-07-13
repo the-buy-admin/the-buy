@@ -1436,9 +1436,12 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
 
         <div className="bbp-exportpreview">
           <div className="bbp-exportheader">
-            <div>
-              <div className="bbp-exportbrand">{brand?.name || "—"}</div>
-              <div className="bbp-exportsub">{season?.label || "—"} · PURCHASE ORDER</div>
+            <div className="bbp-exportbrandrow">
+              <img className="bbp-exportlogo" src={`${import.meta.env.BASE_URL}logo-to.png`} alt="T.O" />
+              <div>
+                <div className="bbp-exportbrand">{brand?.name || "—"}</div>
+                <div className="bbp-exportsub">{season?.label || "—"} · PURCHASE ORDER</div>
+              </div>
             </div>
             <div className="bbp-exportmeta">
               <div>PO#: {poNumber(brand, season, poNextRev)}</div>
@@ -1446,6 +1449,29 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
               <div>ITEMS: {exportOrders.length}</div>
               <div>TOTAL UNITS: {totals.units}</div>
               <div>TOTAL WSP: {currencyLabel} {fmt2(totals.wsp)}</div>
+            </div>
+          </div>
+
+          <div className="bbp-exportinfo">
+            <div className="bbp-exportinfo-col">
+              <div className="bbp-exportinfo-label">Ordered by</div>
+              <div>T.O Company</div>
+              <div>Shinya Okazaki (Head of Buying)</div>
+              <div>okazaki@to1981.com</div>
+            </div>
+            <div className="bbp-exportinfo-col">
+              <div className="bbp-exportinfo-label">Ship to</div>
+              <div>T.O co., ltd.</div>
+              <div>#201 Lotus Coat, 3-11-17 Harimayacho, Kochi, Japan 780-0822</div>
+              <div>+81-90-8281-1250</div>
+            </div>
+            <div className="bbp-exportinfo-col">
+              <div className="bbp-exportinfo-label">Shipping / Export</div>
+              <div>担当 Saki Sugimura</div>
+              <div>saki@to1981.com</div>
+              <div>+81 90 9770 3174</div>
+              <div>DHL Account: 588199549</div>
+              <div>UPS Account: A9998E</div>
             </div>
           </div>
 
@@ -2703,6 +2729,17 @@ function Style() {
       .bbp-exportbrand { font-family: var(--font-serif); font-size: 22px; font-weight: 500; letter-spacing: 0.02em; }
       .bbp-exportsub { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft); margin-top: 6px; }
       .bbp-exportmeta { text-align: right; font-family: var(--font-mono); font-size: 10px; color: var(--ink-soft); line-height: 1.9; }
+      .bbp-exportbrandrow { display: flex; align-items: center; gap: 16px; }
+      .bbp-exportlogo { height: 40px; width: auto; object-fit: contain; flex-shrink: 0; filter: grayscale(1); }
+      .bbp-exportinfo {
+        display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
+        margin-bottom: 26px; padding-bottom: 18px; border-bottom: 1px solid var(--line);
+        font-size: 10.5px; line-height: 1.6; color: var(--ink-soft);
+      }
+      .bbp-exportinfo-label {
+        font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink);
+        font-weight: 600; margin-bottom: 4px;
+      }
       .bbp-exporttotals {
         display: flex; justify-content: flex-end; gap: 24px; margin-top: 18px; padding-top: 14px;
         border-top: 1px solid var(--ink); font-family: var(--font-mono); font-size: 11px; flex-wrap: wrap;
