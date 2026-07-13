@@ -12,6 +12,11 @@ export default defineConfig({
       // We ship our own hand-written public/manifest.json as-is.
       manifest: false,
       registerType: "autoUpdate",
+      // Registered manually (src/main.jsx) so we can poll for updates
+      // instead of only checking once per page load - GitHub Pages caches
+      // sw.js for several minutes, so a plain reload right after deploying
+      // often still sees the old service worker.
+      injectRegister: false,
       includeAssets: ["icon-192.png", "icon-512.png", "icon-apple-touch.png"],
       workbox: {
         // App shell is cached for offline/instant loads. Firebase calls (auth +
