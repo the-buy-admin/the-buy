@@ -39,9 +39,22 @@ function dbPathForKey(key) {
   return `data/${encodeURIComponent(key)}`;
 }
 
+// Spreading a large Uint8Array into String.fromCharCode(...) blows the call
+// stack (each byte becomes a function argument) once payloads get past a few
+// tens of KB - easy to hit once an order carries several photos. Chunking
+// keeps each fromCharCode call well under any engine's argument limit.
+function bytesToBase64(bytes) {
+  const chunkSize = 8192;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
 function randomSaltB64() {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
-  return btoa(String.fromCharCode(...bytes));
+  return bytesToBase64(bytes);
 }
 
 async function deriveKey(password, saltB64) {
@@ -75,7 +88,7 @@ async function encryptString(plain) {
   const combined = new Uint8Array(iv.length + cipherBytes.length);
   combined.set(iv, 0);
   combined.set(cipherBytes, iv.length);
-  return btoa(String.fromCharCode(...combined));
+  return bytesToBase64(combined);
 }
 
 async function decryptString(b64) {
