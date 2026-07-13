@@ -737,6 +737,35 @@ export default function App() {
       onConfirm: () => setMasters((m) => ({ ...m, seasons: m.seasons.filter((s) => s.id !== id) })),
     });
   };
+  const addItemType = () => {
+    setModal({
+      type: "form",
+      title: "Add Item Type",
+      confirmLabel: "Add",
+      fields: [{ key: "code", label: "Code", placeholder: "e.g. DR" }],
+      onConfirm: (vals) => {
+        const code = (vals.code || "").trim().toUpperCase();
+        if (!code) return;
+        setMasters((m) => {
+          const current = m.itemTypes || ITEM_TYPES;
+          if (current.includes(code)) return m;
+          return { ...m, itemTypes: [...current, code] };
+        });
+      },
+    });
+  };
+  const updateItemType = (index, value) => {
+    setMasters((m) => {
+      const current = m.itemTypes || ITEM_TYPES;
+      return { ...m, itemTypes: current.map((t, i) => (i === index ? value : t)) };
+    });
+  };
+  const removeItemType = (index) => {
+    setMasters((m) => {
+      const current = m.itemTypes || ITEM_TYPES;
+      return { ...m, itemTypes: current.filter((_, i) => i !== index) };
+    });
+  };
 
   if (loadError) {
     return <div className="bbp-root"><div className="bbp-error">Failed to load data. Please reload the page.</div></div>;
@@ -860,6 +889,9 @@ export default function App() {
             addSeason={addSeason}
             removeSeason={removeSeason}
             sortedSeasons={sortedSeasons}
+            addItemType={addItemType}
+            updateItemType={updateItemType}
+            removeItemType={removeItemType}
           />
         )}
       </main>
@@ -1689,7 +1721,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
             <div className="bbp-field">
               <label>Item Type</label>
               <select className="bbp-select" value={form.item} onChange={(e) => setForm((f) => ({ ...f, item: e.target.value }))}>
-                {ITEM_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                {(masters.itemTypes || ITEM_TYPES).map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div className="bbp-field bbp-field--span2">
@@ -1863,6 +1895,9 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
           {visibleOrders.map((o) => {
             const imgs = listImages[o.id] || {};
             const orderSizeList = getOrderSizeList(o);
+            const accEntries = ["acc1", "acc2", "acc3", "acc4"]
+              .map((key) => ({ key, imgKey: "img" + key.charAt(0).toUpperCase() + key.slice(1) }))
+              .filter(({ key, imgKey }) => o[key] || imgs[imgKey]);
             return (
               <div className="bbp-ordlcard" key={o.id}>
                 <div className="bbp-ordlcard-photo">
@@ -1895,6 +1930,17 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                       </div>
                     </div>
                   </div>
+
+                  {accEntries.length > 0 && (
+                    <div className="bbp-ordlcard-accs">
+                      {accEntries.map(({ key, imgKey }) => (
+                        <div className="bbp-ordlcard-acc" key={key}>
+                          {imgs[imgKey] && <img className="bbp-exportimg-inline" src={imgs[imgKey]} alt="" onClick={() => setLightbox(imgs[imgKey])} />}
+                          {o[key]}
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   <div className="bbp-sizechiprow">
                     {orderSizeList.map((s) => {
@@ -2301,7 +2347,9 @@ function PaymentPlanPane({ masters, sortedSeasons, orders, launchPlan, setLaunch
 function MastersPane({
   masters, addBrand, updateBrand, removeBrand,
   addCurrency, removeCurrency, addSeason, removeSeason, sortedSeasons,
+  addItemType, updateItemType, removeItemType,
 }) {
+  const itemTypes = masters.itemTypes || ITEM_TYPES;
   return (
     <div className="bbp-pane">
       <header className="bbp-pane-head">
@@ -2365,6 +2413,26 @@ function MastersPane({
             <div key={s.id} className="bbp-seasonchip">
               {s.label}
               <button className="bbp-chipclose" onClick={() => removeSeason(s.id)}>×</button>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="bbp-mastersection">
+        <div className="bbp-mastersection-head">
+          <h2>Item Types ({itemTypes.length})</h2>
+          <button className="bbp-btn" onClick={addItemType}>+ Add Item Type</button>
+        </div>
+        <div className="bbp-masterlist bbp-masterlist--wrap">
+          {itemTypes.map((t, i) => (
+            <div key={i} className="bbp-seasonchip">
+              <input
+                className="bbp-input"
+                style={{ width: 44, textAlign: "left" }}
+                value={t}
+                onChange={(e) => updateItemType(i, e.target.value)}
+              />
+              <button className="bbp-chipclose" onClick={() => removeItemType(i)}>×</button>
             </div>
           ))}
         </div>
