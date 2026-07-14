@@ -1658,19 +1658,24 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                           <div className="bbp-ordlcard-detailcol bbp-ordlcard-detailcol--swatches">
                             <div className="bbp-ordlcard-collabel">Details</div>
                             <div className="bbp-ordlcard-swatchgrid">
-                              {swatchSlots.map((s, idx) => (
-                                <div className="bbp-ordlcard-swatch" key={s.key}>
-                                  <div className="bbp-ordlcard-swatch-img">
-                                    {s.img
-                                      ? <img src={s.img} alt="" onClick={() => setLightbox(s.img)} />
-                                      : <div className="bbp-ordlcard-noimg">No Photo</div>}
+                              {swatchSlots.map((s, idx) => {
+                                if (!s.img && !s.text) return null;
+                                return (
+                                  <div className="bbp-ordlcard-swatch" key={s.key}>
+                                    {s.img && (
+                                      <div className="bbp-ordlcard-swatch-img">
+                                        <img src={s.img} alt="" onClick={() => setLightbox(s.img)} />
+                                      </div>
+                                    )}
+                                    {(s.text || s.img) && (
+                                      <div className="bbp-ordlcard-swatch-txt">
+                                        <span className="bbp-ordlcard-badge">{CIRCLED_NUMBERS[idx]}</span>
+                                        {s.text || "Additional Detail (Option)"}
+                                      </div>
+                                    )}
                                   </div>
-                                  <div className="bbp-ordlcard-swatch-txt">
-                                    <span className="bbp-ordlcard-badge">{CIRCLED_NUMBERS[idx]}</span>
-                                    {s.text || "Additional Detail (Option)"}
-                                  </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </div>
 
@@ -2000,19 +2005,24 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                     <div className="bbp-ordlcard-detailcol bbp-ordlcard-detailcol--swatches">
                       <div className="bbp-ordlcard-collabel">Details</div>
                       <div className="bbp-ordlcard-swatchgrid">
-                        {swatchSlots.map((s, idx) => (
-                          <div className="bbp-ordlcard-swatch" key={s.key}>
-                            <div className="bbp-ordlcard-swatch-img">
-                              {s.img
-                                ? <img src={s.img} alt="" onClick={() => setLightbox(s.img)} />
-                                : <div className="bbp-ordlcard-noimg">No Photo</div>}
+                        {swatchSlots.map((s, idx) => {
+                          if (!s.img && !s.text) return null;
+                          return (
+                            <div className="bbp-ordlcard-swatch" key={s.key}>
+                              {s.img && (
+                                <div className="bbp-ordlcard-swatch-img">
+                                  <img src={s.img} alt="" onClick={() => setLightbox(s.img)} />
+                                </div>
+                              )}
+                              {(s.text || s.img) && (
+                                <div className="bbp-ordlcard-swatch-txt">
+                                  <span className="bbp-ordlcard-badge">{CIRCLED_NUMBERS[idx]}</span>
+                                  {s.text || "Additional Detail (Option)"}
+                                </div>
+                              )}
                             </div>
-                            <div className="bbp-ordlcard-swatch-txt">
-                              <span className="bbp-ordlcard-badge">{CIRCLED_NUMBERS[idx]}</span>
-                              {s.text || "Additional Detail (Option)"}
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
 
