@@ -1227,9 +1227,11 @@ function TablePane({
 
                   <td className="bbp-td-bold">
                     {r.actualSource === "orders" ? (
-                      <span className="bbp-fromorders" title={`Rolled up from ${orders.filter((o) => o.brandId === r.brand.id && o.seasonId === currentSeason.id).length} order(s)`}>
+                      <span
+                        className="bbp-fromorders bbp-fromorders-boxed"
+                        title={`Rolled up from ${orders.filter((o) => o.brandId === r.brand.id && o.seasonId === currentSeason.id).length} order(s)`}
+                      >
                         {fmtJPY(r.actual.local)}
-                        <span className="bbp-fromorders-tag">Orders</span>
                       </span>
                     ) : (
                       <EditableNumber
@@ -3331,10 +3333,7 @@ function Style() {
 
       /* Orders tab */
       .bbp-fromorders { font-family: var(--font-mono); display: inline-flex; align-items: center; gap: 6px; }
-      .bbp-fromorders-tag {
-        font-size: 8px; letter-spacing: 0.08em; text-transform: uppercase; border: 1px solid var(--ink);
-        padding: 1px 5px; color: var(--ink);
-      }
+      .bbp-fromorders-boxed { border: 1px solid var(--ink); padding: 1px 6px; }
       .bbp-ordercard { background: var(--surface); border: 1px solid var(--line); padding: 20px 22px; margin-bottom: 16px; }
       .bbp-ordercard h3 {
         font-family: var(--font-serif); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
