@@ -33,6 +33,105 @@ const CIRCLED_NUMBERS = ["①", "②", "③", "④", "⑤"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DEFAULT_RATES = { EUR: 165, GBP: 195, USD: 150, PLN: 40, JPY: 1 };
 
+// Bulk Excel import (Orders tab): fixed per-brand column layout, since each
+// supplier's order sheet uses a stable, unchanging format.
+const DEFAULT_IMPORT_TEMPLATES = [
+  {
+    id: "tpl-ma",
+    brandId: "m-a",
+    sheetName: "Sheet1",
+    headerRow: 9,
+    dataStartRow: 10,
+    orderFlagCol: "T",
+    orderFlagThreshold: 1,
+    columns: {
+      model: "B", fabricCode: "C", description: "D", color: "E",
+      unitPrice: "F", note: "G", qty: "T", ltsMonth: "AE",
+    },
+    sizeColumns: [
+      { size: "0", col: "H" }, { size: "38", col: "I" }, { size: "40", col: "J" },
+      { size: "42", col: "K" }, { size: "44", col: "L" }, { size: "46", col: "M" },
+      { size: "48", col: "N" }, { size: "50", col: "O" }, { size: "52", col: "P" },
+      { size: "54", col: "Q" }, { size: "56", col: "R" }, { size: "58", col: "S" },
+    ],
+    currency: "EUR", exrate: 186, afipcPct: 25, costPct: 45,
+  },
+];
+
+function blankImportTemplate() {
+  return {
+    id: uid(),
+    brandId: "",
+    sheetName: "Sheet1",
+    headerRow: 1,
+    dataStartRow: 2,
+    orderFlagCol: "",
+    orderFlagThreshold: 1,
+    columns: { model: "", fabricCode: "", description: "", color: "", unitPrice: "", note: "", qty: "", ltsMonth: "" },
+    sizeColumns: [],
+    currency: "EUR",
+    exrate: 165,
+    afipcPct: 20,
+    costPct: 45,
+  };
+}
+
+function monthNumToAbbr(v) {
+  const n = Number(v);
+  if (!n || n < 1 || n > 12) return "";
+  return MONTHS[n - 1];
+}
+
+function getTemplateCell(sheet, colLetter, rowIndex0) {
+  if (!colLetter) return undefined;
+  try {
+    const c = XLSX.utils.decode_col(String(colLetter).trim().toUpperCase());
+    const addr = XLSX.utils.encode_cell({ r: rowIndex0, c });
+    const cell = sheet[addr];
+    return cell ? cell.v : undefined;
+  } catch (err) {
+    return undefined;
+  }
+}
+
+// Reads every qualifying row (order-flag column >= threshold) out of a sheet
+// per a saved import template, returning plain objects ready to become order
+// forms - no XLSX/cell concepts leak past this function.
+function parseTemplateRows(sheet, template) {
+  const range = XLSX.utils.decode_range(sheet["!ref"] || "A1:A1");
+  const startRow0 = Math.max((Number(template.dataStartRow) || 1) - 1, 0);
+  const threshold = Number(template.orderFlagThreshold) || 1;
+  const rows = [];
+  for (let r = startRow0; r <= range.e.r; r++) {
+    const flagVal = Number(getTemplateCell(sheet, template.orderFlagCol, r)) || 0;
+    if (flagVal < threshold) continue;
+    const model = getTemplateCell(sheet, template.columns.model, r);
+    if (model === undefined || model === null || String(model).trim() === "") continue;
+    const fabricCode = getTemplateCell(sheet, template.columns.fabricCode, r);
+    const description = getTemplateCell(sheet, template.columns.description, r);
+    const color = getTemplateCell(sheet, template.columns.color, r);
+    const unitPrice = getTemplateCell(sheet, template.columns.unitPrice, r);
+    const note = getTemplateCell(sheet, template.columns.note, r);
+    const ltsRaw = getTemplateCell(sheet, template.columns.ltsMonth, r);
+    const sizes = {};
+    (template.sizeColumns || []).forEach((sc) => {
+      const v = Number(getTemplateCell(sheet, sc.col, r)) || 0;
+      if (v > 0) sizes[sc.size] = v;
+    });
+    rows.push({
+      rowNum: r + 1,
+      model: String(model).trim(),
+      fabric: [fabricCode, description].map((v) => String(v ?? "").trim()).filter(Boolean).join(" "),
+      color: String(color ?? "").trim(),
+      wsp: Number(unitPrice) || 0,
+      note: String(note ?? "").trim(),
+      lts: monthNumToAbbr(ltsRaw),
+      sizes,
+    });
+  }
+  return rows;
+}
+
 function blankOrderForm() {
   return {
     brandId: "", seasonId: "", delivery: "Aug", item: "BL", model: "",
@@ -800,6 +899,69 @@ export default function App() {
     });
   };
 
+  const addImportTemplate = () => {
+    setMasters((m) => {
+      const current = m.importTemplates || DEFAULT_IMPORT_TEMPLATES;
+      return { ...m, importTemplates: [...current, blankImportTemplate()] };
+    });
+  };
+  const updateImportTemplate = (id, patch) => {
+    setMasters((m) => {
+      const current = m.importTemplates || DEFAULT_IMPORT_TEMPLATES;
+      return { ...m, importTemplates: current.map((t) => (t.id === id ? { ...t, ...patch } : t)) };
+    });
+  };
+  const removeImportTemplate = (id) => {
+    setMasters((m) => {
+      const current = m.importTemplates || DEFAULT_IMPORT_TEMPLATES;
+      return { ...m, importTemplates: current.filter((t) => t.id !== id) };
+    });
+  };
+  const updateImportTemplateColumn = (id, key, value) => {
+    setMasters((m) => {
+      const current = m.importTemplates || DEFAULT_IMPORT_TEMPLATES;
+      return {
+        ...m,
+        importTemplates: current.map((t) => (t.id === id ? { ...t, columns: { ...t.columns, [key]: value } } : t)),
+      };
+    });
+  };
+  const addImportTemplateSizeCol = (id) => {
+    setMasters((m) => {
+      const current = m.importTemplates || DEFAULT_IMPORT_TEMPLATES;
+      return {
+        ...m,
+        importTemplates: current.map((t) =>
+          t.id === id ? { ...t, sizeColumns: [...(t.sizeColumns || []), { size: "", col: "" }] } : t
+        ),
+      };
+    });
+  };
+  const updateImportTemplateSizeCol = (id, idx, patch) => {
+    setMasters((m) => {
+      const current = m.importTemplates || DEFAULT_IMPORT_TEMPLATES;
+      return {
+        ...m,
+        importTemplates: current.map((t) =>
+          t.id === id
+            ? { ...t, sizeColumns: t.sizeColumns.map((sc, i) => (i === idx ? { ...sc, ...patch } : sc)) }
+            : t
+        ),
+      };
+    });
+  };
+  const removeImportTemplateSizeCol = (id, idx) => {
+    setMasters((m) => {
+      const current = m.importTemplates || DEFAULT_IMPORT_TEMPLATES;
+      return {
+        ...m,
+        importTemplates: current.map((t) =>
+          t.id === id ? { ...t, sizeColumns: t.sizeColumns.filter((_, i) => i !== idx) } : t
+        ),
+      };
+    });
+  };
+
   if (loadError) {
     return <div className="bbp-root"><div className="bbp-error">Failed to load data. Please reload the page.</div></div>;
   }
@@ -928,6 +1090,13 @@ export default function App() {
             addSizeSystem={addSizeSystem}
             updateSizeSystem={updateSizeSystem}
             removeSizeSystem={removeSizeSystem}
+            addImportTemplate={addImportTemplate}
+            updateImportTemplate={updateImportTemplate}
+            removeImportTemplate={removeImportTemplate}
+            updateImportTemplateColumn={updateImportTemplateColumn}
+            addImportTemplateSizeCol={addImportTemplateSizeCol}
+            updateImportTemplateSizeCol={updateImportTemplateSizeCol}
+            removeImportTemplateSizeCol={removeImportTemplateSizeCol}
           />
         )}
       </main>
@@ -1220,6 +1389,88 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
   });
   const toggleCol = (key) => setVisibleCols((v) => ({ ...v, [key]: !v[key] }));
   const sizeSystems = masters.sizeSystems || DEFAULT_SIZE_SYSTEMS;
+  const importTemplates = masters.importTemplates || DEFAULT_IMPORT_TEMPLATES;
+
+  const [bulkBrandId, setBulkBrandId] = useState("");
+  const [bulkSeasonId, setBulkSeasonId] = useState("");
+  const [bulkFileName, setBulkFileName] = useState("");
+  const [bulkParsedRows, setBulkParsedRows] = useState([]);
+  const bulkTemplate = importTemplates.find((t) => t.brandId === bulkBrandId) || null;
+
+  const handleBulkFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    if (!bulkBrandId) { setModal({ type: "alert", title: "Missing Brand", message: "Please choose a brand first." }); return; }
+    if (!bulkSeasonId) { setModal({ type: "alert", title: "Missing Season", message: "Please choose a season first." }); return; }
+    if (!bulkTemplate) {
+      setModal({
+        type: "alert", title: "No Template",
+        message: "This brand has no import template. Set one up in Setup → Import Templates.",
+      });
+      return;
+    }
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const sheet = wb.Sheets[bulkTemplate.sheetName] || wb.Sheets[wb.SheetNames[0]];
+      if (!sheet) throw new Error("Sheet not found");
+      const rows = parseTemplateRows(sheet, bulkTemplate);
+      setBulkParsedRows(rows);
+      setBulkFileName(file.name);
+    } catch (err) {
+      setBulkParsedRows([]);
+      setBulkFileName("");
+      setModal({
+        type: "alert", title: "Parse Failed",
+        message: `Could not read this file (${err && err.message ? err.message : "unknown error"}).`,
+      });
+    }
+  };
+
+  const confirmBulkImport = () => {
+    if (!bulkTemplate || bulkParsedRows.length === 0) return;
+    const records = bulkParsedRows.map((row) => {
+      const form = {
+        ...blankOrderForm(),
+        brandId: bulkBrandId,
+        seasonId: bulkSeasonId,
+        model: row.model,
+        fabric: row.fabric,
+        color: row.color,
+        sizeSystem: "custom",
+        customSizes: bulkTemplate.sizeColumns.map((sc) => sc.size).join(","),
+        sizes: row.sizes,
+        currency: bulkTemplate.currency,
+        exrate: bulkTemplate.exrate,
+        wsp: row.wsp,
+        afipcPct: bulkTemplate.afipcPct,
+        costPct: bulkTemplate.costPct,
+        lts: row.lts,
+        note: row.note,
+      };
+      const t = computeOrderTotals(form);
+      const id = `${Date.now()}-${uid()}`;
+      return {
+        ...form,
+        id,
+        totalUnits: t.totalUnits,
+        wsplb: t.wsplb,
+        totalWSP: t.totalWSP,
+        totalWSPLB: t.totalWSPLB,
+        rp: t.rp,
+        erp: t.erp,
+        markup: t.markup,
+      };
+    });
+    setOrders((prev) => [...prev, ...records]);
+    setModal({ type: "alert", title: "Import Complete", message: `${records.length} order(s) were registered.` });
+    setBulkParsedRows([]);
+    setBulkFileName("");
+    setBulkBrandId("");
+    setBulkSeasonId("");
+    setView("list");
+  };
 
   const exportOrders = useMemo(
     () => orders.filter((o) => o.brandId === exportBrandId && o.seasonId === exportSeasonId),
@@ -1740,6 +1991,91 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
     );
   }
 
+  if (view === "bulkimport") {
+    return (
+      <div className="bbp-pane">
+        <header className="bbp-pane-head">
+          <div>
+            <div className="bbp-eyebrow">Orders</div>
+            <h1 className="bbp-title">Bulk Import from Excel</h1>
+          </div>
+          <div className="bbp-headctrls">
+            <button className="bbp-btn bbp-btn--ghost" onClick={() => setView("list")}>← Back to List</button>
+          </div>
+        </header>
+
+        <section className="bbp-ordercard">
+          <h3>Brand &amp; Season</h3>
+          <div className="bbp-ordergrid bbp-ordergrid--3">
+            <div className="bbp-field">
+              <label>Brand</label>
+              <select
+                className="bbp-select" value={bulkBrandId}
+                onChange={(e) => { setBulkBrandId(e.target.value); setBulkParsedRows([]); setBulkFileName(""); }}
+              >
+                <option value="">— Select Brand —</option>
+                {masters.brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+            <div className="bbp-field">
+              <label>Season</label>
+              <select className="bbp-select" value={bulkSeasonId} onChange={(e) => setBulkSeasonId(e.target.value)}>
+                {sortedSeasons.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </select>
+            </div>
+            <div className="bbp-field">
+              <label>Excel File</label>
+              <input type="file" accept=".xlsx,.xls" onChange={handleBulkFileChange} disabled={!bulkBrandId || !bulkSeasonId} />
+            </div>
+          </div>
+          {bulkBrandId && !bulkTemplate && (
+            <div className="bbp-importwarn">
+              No import template is set up for this brand yet. Add one in Setup → Import Templates.
+            </div>
+          )}
+          {bulkTemplate && (
+            <div className="bbp-importinfo">
+              Template: Sheet "{bulkTemplate.sheetName}", header row {bulkTemplate.headerRow}, data from row {bulkTemplate.dataStartRow}.
+            </div>
+          )}
+        </section>
+
+        {bulkParsedRows.length > 0 && (
+          <section className="bbp-ordercard">
+            <h3>Preview ({bulkParsedRows.length} order(s) from {bulkFileName})</h3>
+            <div className="bbp-tablewrap">
+              <table className="bbp-table">
+                <thead>
+                  <tr>
+                    <th>Row</th><th>Model#</th><th>Main Fabric</th><th>Color</th>
+                    <th>WSP</th><th>Total Qty</th><th>LTS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bulkParsedRows.map((row) => (
+                    <tr key={row.rowNum}>
+                      <td>{row.rowNum}</td>
+                      <td>{row.model}</td>
+                      <td>{row.fabric}</td>
+                      <td>{row.color}</td>
+                      <td className="bbp-td-num">{row.wsp}</td>
+                      <td className="bbp-td-num">{Object.values(row.sizes).reduce((a, b) => a + b, 0)}</td>
+                      <td>{row.lts}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="bbp-orderactions">
+              <button className="bbp-btn" onClick={confirmBulkImport}>Register {bulkParsedRows.length} Order(s)</button>
+              <button className="bbp-btn bbp-btn--ghost" onClick={() => { setBulkParsedRows([]); setBulkFileName(""); }}>Cancel</button>
+            </div>
+          </section>
+        )}
+      </div>
+    );
+  }
+
   if (view === "form") {
     return (
       <div className="bbp-pane">
@@ -1943,6 +2279,18 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
             }}
           >
             Export / Print
+          </button>
+          <button
+            className="bbp-btn bbp-btn--ghost"
+            onClick={() => {
+              setBulkBrandId(filterBrandId || "");
+              setBulkSeasonId(seasonId || sortedSeasons[0]?.id || "");
+              setBulkParsedRows([]);
+              setBulkFileName("");
+              setView("bulkimport");
+            }}
+          >
+            Bulk Import from Excel
           </button>
           <button className="bbp-btn" onClick={startNew}>+ New Order</button>
         </div>
@@ -2432,9 +2780,12 @@ function MastersPane({
   addCurrency, removeCurrency, addSeason, removeSeason, sortedSeasons,
   addItemType, updateItemType, removeItemType,
   addSizeSystem, updateSizeSystem, removeSizeSystem,
+  addImportTemplate, updateImportTemplate, removeImportTemplate,
+  updateImportTemplateColumn, addImportTemplateSizeCol, updateImportTemplateSizeCol, removeImportTemplateSizeCol,
 }) {
   const itemTypes = masters.itemTypes || ITEM_TYPES;
   const sizeSystems = masters.sizeSystems || DEFAULT_SIZE_SYSTEMS;
+  const importTemplates = masters.importTemplates || DEFAULT_IMPORT_TEMPLATES;
   return (
     <div className="bbp-pane">
       <header className="bbp-pane-head">
@@ -2544,6 +2895,148 @@ function MastersPane({
                 onChange={(e) => updateSizeSystem(sys.id, { sizesText: e.target.value })}
               />
               <button className="bbp-btn bbp-btn--ghost" onClick={() => removeSizeSystem(sys.id)}>Delete</button>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="bbp-mastersection">
+        <div className="bbp-mastersection-head">
+          <h2>Import Templates ({importTemplates.length})</h2>
+          <button className="bbp-btn" onClick={addImportTemplate}>+ Add Template</button>
+        </div>
+        <div className="bbp-tpllist">
+          {importTemplates.map((tpl) => (
+            <div key={tpl.id} className="bbp-tplcard">
+              <div className="bbp-tplcard-head">
+                <div className="bbp-field">
+                  <label>Brand</label>
+                  <select
+                    className="bbp-select"
+                    value={tpl.brandId}
+                    onChange={(e) => updateImportTemplate(tpl.id, { brandId: e.target.value })}
+                  >
+                    <option value="">— Select Brand —</option>
+                    {masters.brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                </div>
+                <button className="bbp-btn bbp-btn--ghost" onClick={() => removeImportTemplate(tpl.id)}>Delete</button>
+              </div>
+
+              <div className="bbp-ordergrid bbp-ordergrid--4">
+                <div className="bbp-field">
+                  <label>Sheet Name</label>
+                  <input
+                    className="bbp-textinput"
+                    value={tpl.sheetName}
+                    onChange={(e) => updateImportTemplate(tpl.id, { sheetName: e.target.value })}
+                  />
+                </div>
+                <div className="bbp-field">
+                  <label>Header Row</label>
+                  <input
+                    type="number" className="bbp-textinput" value={tpl.headerRow}
+                    onChange={(e) => updateImportTemplate(tpl.id, { headerRow: Number(e.target.value) || 1 })}
+                  />
+                </div>
+                <div className="bbp-field">
+                  <label>Data Start Row</label>
+                  <input
+                    type="number" className="bbp-textinput" value={tpl.dataStartRow}
+                    onChange={(e) => updateImportTemplate(tpl.id, { dataStartRow: Number(e.target.value) || 1 })}
+                  />
+                </div>
+                <div className="bbp-field">
+                  <label>Order Flag Column</label>
+                  <input
+                    className="bbp-textinput" value={tpl.orderFlagCol} placeholder="e.g. T"
+                    onChange={(e) => updateImportTemplate(tpl.id, { orderFlagCol: e.target.value.toUpperCase() })}
+                  />
+                </div>
+              </div>
+
+              <div className="bbp-ordergrid bbp-ordergrid--4">
+                <div className="bbp-field">
+                  <label>Order Flag ≥</label>
+                  <input
+                    type="number" className="bbp-textinput" value={tpl.orderFlagThreshold}
+                    onChange={(e) => updateImportTemplate(tpl.id, { orderFlagThreshold: Number(e.target.value) || 1 })}
+                  />
+                </div>
+                <div className="bbp-field">
+                  <label>Currency</label>
+                  <select
+                    className="bbp-select" value={tpl.currency}
+                    onChange={(e) => updateImportTemplate(tpl.id, { currency: e.target.value })}
+                  >
+                    {masters.currencies.map((c) => <option key={c.code} value={c.code}>{c.code}</option>)}
+                  </select>
+                </div>
+                <div className="bbp-field">
+                  <label>Exchange Rate</label>
+                  <input
+                    type="number" className="bbp-textinput" value={tpl.exrate}
+                    onChange={(e) => updateImportTemplate(tpl.id, { exrate: Number(e.target.value) || 0 })}
+                  />
+                </div>
+                <div className="bbp-field">
+                  <label>AF・IPC %</label>
+                  <input
+                    type="number" className="bbp-textinput" value={tpl.afipcPct}
+                    onChange={(e) => updateImportTemplate(tpl.id, { afipcPct: Number(e.target.value) || 0 })}
+                  />
+                </div>
+              </div>
+
+              <div className="bbp-ordergrid bbp-ordergrid--4">
+                <div className="bbp-field">
+                  <label>Cost Ratio %</label>
+                  <input
+                    type="number" className="bbp-textinput" value={tpl.costPct}
+                    onChange={(e) => updateImportTemplate(tpl.id, { costPct: Number(e.target.value) || 0 })}
+                  />
+                </div>
+              </div>
+
+              <div className="bbp-tplsection">
+                <div className="bbp-ordlcard-collabel">Column Mapping</div>
+                <div className="bbp-ordergrid bbp-ordergrid--4">
+                  {[
+                    ["model", "Model#"], ["fabricCode", "Fabric Code"], ["description", "Description"], ["color", "Color"],
+                    ["unitPrice", "Unit Price"], ["note", "Note"], ["qty", "Qty"], ["ltsMonth", "LTS Month"],
+                  ].map(([key, label]) => (
+                    <div className="bbp-field" key={key}>
+                      <label>{label}</label>
+                      <input
+                        className="bbp-textinput"
+                        value={tpl.columns[key] || ""}
+                        placeholder="e.g. B"
+                        onChange={(e) => updateImportTemplateColumn(tpl.id, key, e.target.value.toUpperCase())}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bbp-tplsection">
+                <div className="bbp-ordlcard-collabel">Size Columns</div>
+                <div className="bbp-tplsizerows">
+                  {(tpl.sizeColumns || []).map((sc, i) => (
+                    <div className="bbp-tplsizerow" key={i}>
+                      <input
+                        className="bbp-textinput bbp-tplsizerow-size" value={sc.size} placeholder="Size"
+                        onChange={(e) => updateImportTemplateSizeCol(tpl.id, i, { size: e.target.value })}
+                      />
+                      <input
+                        className="bbp-textinput bbp-tplsizerow-col" value={sc.col} placeholder="Col"
+                        onChange={(e) => updateImportTemplateSizeCol(tpl.id, i, { col: e.target.value.toUpperCase() })}
+                      />
+                      <button className="bbp-chipclose" onClick={() => removeImportTemplateSizeCol(tpl.id, i)}>×</button>
+                    </div>
+                  ))}
+                  <button className="bbp-btn bbp-btn--ghost" onClick={() => addImportTemplateSizeCol(tpl.id)}>+ Add Size Column</button>
+                </div>
+              </div>
             </div>
           ))}
         </div>
@@ -2660,6 +3153,8 @@ function Style() {
       }
       .bbp-backupbtn:hover { background: var(--ink); color: var(--bg); }
       .bbp-importmsg { font-size: 10px; letter-spacing: 0.05em; color: var(--positive); }
+      .bbp-importwarn { margin-top: 14px; font-size: 12px; color: var(--negative); }
+      .bbp-importinfo { margin-top: 14px; font-size: 12px; color: var(--ink-soft); }
 
       .bbp-main { flex: 1; overflow-y: auto; padding: 44px 56px; background: var(--bg); }
       .bbp-pane { max-width: 1760px; width: 100%; }
@@ -2731,6 +3226,14 @@ function Style() {
       .bbp-masterrow { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); }
       .bbp-currencycode { font-family: var(--font-mono); font-weight: 500; width: 48px; letter-spacing: 0.05em; }
       .bbp-currencyname { flex: 1; color: var(--ink-soft); font-size: 12px; }
+
+      .bbp-tpllist { display: flex; flex-direction: column; gap: 20px; }
+      .bbp-tplcard { border: 1px solid var(--line); padding: 18px 20px; display: flex; flex-direction: column; gap: 16px; }
+      .bbp-tplcard-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+      .bbp-tplsection { display: flex; flex-direction: column; gap: 10px; padding-top: 14px; border-top: 1px solid var(--line); }
+      .bbp-tplsizerows { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+      .bbp-tplsizerow { display: flex; align-items: center; gap: 4px; border: 1px solid var(--line); padding: 4px 6px; }
+      .bbp-tplsizerow-size, .bbp-tplsizerow-col { width: 48px; text-align: center; }
 
       .bbp-seasonchip {
         display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--line);
