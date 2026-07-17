@@ -1203,7 +1203,7 @@ function TablePane({
                   <td className="bbp-td-brand">{r.brand.name}</td>
                   <td className="bbp-td-currency">{r.currency.code}</td>
 
-                  <td>
+                  <td className="bbp-td-bold">
                     <EditableNumber
                       value={r.plan.local}
                       round={0}
@@ -1222,10 +1222,10 @@ function TablePane({
                       />
                     )}
                   </td>
-                  <td className="bbp-td-jpy bbp-td-jpy--plan">¥{fmtJPY(r.planJPY)}</td>
+                  <td className="bbp-td-jpy bbp-td-jpy--plan bbp-td-bold">¥{fmtJPY(r.planJPY)}</td>
                   <td className="bbp-td-num">{fmtPct(planShare)}</td>
 
-                  <td>
+                  <td className="bbp-td-bold">
                     {r.actualSource === "orders" ? (
                       <span className="bbp-fromorders" title={`Rolled up from ${orders.filter((o) => o.brandId === r.brand.id && o.seasonId === currentSeason.id).length} order(s)`}>
                         {fmtJPY(r.actual.local)}
@@ -1253,13 +1253,13 @@ function TablePane({
                       />
                     )}
                   </td>
-                  <td className="bbp-td-jpy bbp-td-jpy--actual">¥{fmtJPY(r.actualJPY)}</td>
+                  <td className="bbp-td-jpy bbp-td-jpy--actual bbp-td-bold">¥{fmtJPY(r.actualJPY)}</td>
 
                   <td className="bbp-td-num">{fmtPct(share)}</td>
-                  <td className="bbp-td-num">
+                  <td className="bbp-td-num bbp-td-bold">
                     {vsPlan === null ? "—" : <Pill tone={vsPlan >= 0 ? "positive" : "negative"}>{fmtPct(vsPlan)}</Pill>}
                   </td>
-                  <td className="bbp-td-num">
+                  <td className="bbp-td-num bbp-td-bold">
                     {yoy === null ? "—" : <Pill tone={yoy >= 1 ? "positive" : "negative"}>{fmtPct(yoy)}</Pill>}
                   </td>
                 </tr>
@@ -1269,13 +1269,13 @@ function TablePane({
           <tfoot>
             <tr>
               <td colSpan={4} className="bbp-td-totallabel">Total</td>
-              <td className="bbp-td-jpy bbp-td-jpy--plan">¥{fmtJPY(seasonPlanTotal)}</td>
+              <td className="bbp-td-jpy bbp-td-jpy--plan bbp-td-bold">¥{fmtJPY(seasonPlanTotal)}</td>
               <td>100%</td>
               <td colSpan={2}></td>
-              <td className="bbp-td-jpy bbp-td-jpy--actual">¥{fmtJPY(seasonActualTotal)}</td>
+              <td className="bbp-td-jpy bbp-td-jpy--actual bbp-td-bold">¥{fmtJPY(seasonActualTotal)}</td>
               <td>100%</td>
-              <td>{fmtPct(vsPlanTotalPct)}</td>
-              <td>{fmtPct(yoyTotalPct)}</td>
+              <td className="bbp-td-bold">{fmtPct(vsPlanTotalPct)}</td>
+              <td className="bbp-td-bold">{fmtPct(yoyTotalPct)}</td>
             </tr>
           </tfoot>
         </table>
@@ -3210,7 +3210,7 @@ function Style() {
         position: sticky; top: 0; z-index: 3; box-sizing: border-box;
       }
       .bbp-th-brand { text-align: left !important; position: sticky; left: 0; top: 0; background: var(--bg); z-index: 4; }
-      .bbp-th-bold { font-weight: 700; color: var(--ink); }
+      .bbp-table thead th.bbp-th-bold { font-weight: 700; color: var(--ink); }
 
       .bbp-td-brand { text-align: left; font-weight: 400; position: sticky; left: 0; background: var(--surface); z-index: 1; vertical-align: middle; }
       .bbp-row--inactive .bbp-td-brand { color: var(--ink-soft); font-style: normal; }
@@ -3220,6 +3220,8 @@ function Style() {
       .bbp-td-jpy { text-align: right; font-family: var(--font-mono); font-weight: 400; }
       .bbp-td-jpy--plan { color: var(--ink-soft); }
       .bbp-td-jpy--actual { color: var(--ink); }
+      .bbp-table td.bbp-td-bold { font-weight: 700; }
+      .bbp-table td.bbp-td-bold .bbp-input { font-weight: 700; }
       .bbp-td-totallabel { text-align: right; font-weight: 500; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft); }
       .bbp-fixed { font-family: var(--font-mono); color: var(--ink-soft); padding: 0 6px; font-weight: 300; }
 
