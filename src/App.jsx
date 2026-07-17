@@ -1160,7 +1160,7 @@ function TablePane({
 
       <div className="bbp-summary">
         <SummaryCard label="Total Plan" value={`¥${fmtJPY(seasonPlanTotal)}`} tone="plan" />
-        <SummaryCard label="Total Actual" value={`¥${fmtJPY(seasonActualTotal)}`} tone="actual" />
+        <SummaryCard label="Total ACT" value={`¥${fmtJPY(seasonActualTotal)}`} tone="actual" />
         <SummaryCard
           label="vs Plan"
           value={fmtPct(vsPlanTotalPct)}
@@ -1179,16 +1179,16 @@ function TablePane({
             <tr>
               <th className="bbp-th-brand">Brand</th>
               <th>Currency</th>
-              <th>Plan<br />Local Amt</th>
+              <th className="bbp-th-bold">Plan<br />Local Amt</th>
               <th>Plan<br />Rate</th>
-              <th>Plan<br />JPY</th>
+              <th className="bbp-th-bold">Plan<br />JPY</th>
               <th>Plan<br />Share</th>
-              <th>Actual<br />Local Amt</th>
-              <th>Actual<br />Rate</th>
-              <th>Actual<br />JPY</th>
-              <th>Actual<br />Share</th>
-              <th>vs Plan</th>
-              <th>{yoyLabel}</th>
+              <th className="bbp-th-bold">ACT<br />Local Amt</th>
+              <th>ACT<br />Rate</th>
+              <th className="bbp-th-bold">ACT<br />JPY</th>
+              <th>ACT<br />Share</th>
+              <th className="bbp-th-bold">vs Plan</th>
+              <th className="bbp-th-bold">{yoyLabel}</th>
             </tr>
           </thead>
           <tbody>
@@ -3203,13 +3203,14 @@ function Style() {
 
       .bbp-tablewrap { background: var(--surface); border: 1px solid var(--line); border-radius: 0; overflow: auto; max-height: 640px; }
       .bbp-table { border-collapse: collapse; width: 100%; font-size: 12px; }
-      .bbp-table th, .bbp-table td { padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+      .bbp-table th, .bbp-table td { padding: 10px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
       .bbp-table thead th {
         font-family: var(--font-sans); font-weight: 400; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
         color: var(--ink-soft); text-align: center; background: var(--bg); line-height: 1.5;
         position: sticky; top: 0; z-index: 3; box-sizing: border-box;
       }
       .bbp-th-brand { text-align: left !important; position: sticky; left: 0; top: 0; background: var(--bg); z-index: 4; }
+      .bbp-th-bold { font-weight: 700; color: var(--ink); }
 
       .bbp-td-brand { text-align: left; font-weight: 400; position: sticky; left: 0; background: var(--surface); z-index: 1; vertical-align: middle; }
       .bbp-row--inactive .bbp-td-brand { color: var(--ink-soft); font-style: normal; }
