@@ -120,8 +120,8 @@ function parseTemplateRows(sheet, template) {
     });
     rows.push({
       rowNum: r + 1,
-      model: String(model).trim(),
-      fabric: [fabricCode, description].map((v) => String(v ?? "").trim()).filter(Boolean).join(" "),
+      model: [model, description].map((v) => String(v ?? "").trim()).filter(Boolean).join(" "),
+      fabric: String(fabricCode ?? "").trim(),
       color: String(color ?? "").trim(),
       wsp: Number(unitPrice) || 0,
       note: String(note ?? "").trim(),
@@ -185,6 +185,22 @@ function getOrderSizeList(form, sizeSystems = DEFAULT_SIZE_SYSTEMS) {
   const match = sizeSystems.find((sys) => sys.id === form.sizeSystem);
   const text = match ? match.sizesText : sizeSystems[0]?.sizesText;
   return (text || "").split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+// Trims a size list down to the run that was actually ordered: from the
+// first size with qty > 0 through the last one, keeping any zero-qty sizes
+// in between (they're part of the ordered size curve) but dropping the
+// untouched sizes before/after it. If nothing was ordered, leaves it as-is.
+function trimSizeRangeToOrdered(sizeList, sizesObj) {
+  let firstIdx = -1, lastIdx = -1;
+  sizeList.forEach((s, i) => {
+    if (Number(sizesObj?.[s]) > 0) {
+      if (firstIdx === -1) firstIdx = i;
+      lastIdx = i;
+    }
+  });
+  if (firstIdx === -1) return sizeList;
+  return sizeList.slice(firstIdx, lastIdx + 1);
 }
 
 // Union of every size key used across a set of orders, ordered sensibly:
@@ -1393,6 +1409,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
 
   const [bulkBrandId, setBulkBrandId] = useState("");
   const [bulkSeasonId, setBulkSeasonId] = useState("");
+  const [bulkDelivery, setBulkDelivery] = useState("Aug");
   const [bulkFileName, setBulkFileName] = useState("");
   const [bulkParsedRows, setBulkParsedRows] = useState([]);
   const bulkTemplate = importTemplates.find((t) => t.brandId === bulkBrandId) || null;
@@ -1435,6 +1452,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
         ...blankOrderForm(),
         brandId: bulkBrandId,
         seasonId: bulkSeasonId,
+        delivery: bulkDelivery,
         model: row.model,
         fabric: row.fabric,
         color: row.color,
@@ -1872,11 +1890,11 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                     <div className="bbp-ordlcard bbp-ordlcard--compact" key={o.id}>
                       <div className="bbp-ordlcard-photo">
                         <div className="bbp-ordlcard-tag">#{i + 1}</div>
-                        <div className="bbp-ordlcard-img">
-                          {imgs.imgModel
-                            ? <img src={imgs.imgModel} alt="" onClick={() => setLightbox(imgs.imgModel)} />
-                            : <div className="bbp-ordlcard-noimg">No Photo</div>}
-                        </div>
+                        {imgs.imgModel && (
+                          <div className="bbp-ordlcard-img">
+                            <img src={imgs.imgModel} alt="" onClick={() => setLightbox(imgs.imgModel)} />
+                          </div>
+                        )}
                       </div>
 
                       <div className="bbp-ordlcard-body">
@@ -2006,7 +2024,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
 
         <section className="bbp-ordercard">
           <h3>Brand &amp; Season</h3>
-          <div className="bbp-ordergrid bbp-ordergrid--3">
+          <div className="bbp-ordergrid bbp-ordergrid--4">
             <div className="bbp-field">
               <label>Brand</label>
               <select
@@ -2021,6 +2039,12 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
               <label>Season</label>
               <select className="bbp-select" value={bulkSeasonId} onChange={(e) => setBulkSeasonId(e.target.value)}>
                 {sortedSeasons.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </select>
+            </div>
+            <div className="bbp-field">
+              <label>Delivery Month</label>
+              <select className="bbp-select" value={bulkDelivery} onChange={(e) => setBulkDelivery(e.target.value)}>
+                {MONTHS.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
             <div className="bbp-field">
@@ -2048,7 +2072,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                 <thead>
                   <tr>
                     <th>Row</th><th>Model#</th><th>Main Fabric</th><th>Color</th>
-                    <th>WSP</th><th>Total Qty</th><th>LTS</th>
+                    <th>WSP</th><th>Total Qty</th><th>LTS</th><th>Note</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2061,6 +2085,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                       <td className="bbp-td-num">{row.wsp}</td>
                       <td className="bbp-td-num">{Object.values(row.sizes).reduce((a, b) => a + b, 0)}</td>
                       <td>{row.lts}</td>
+                      <td>{row.note}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -2302,7 +2327,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
         <div className="bbp-ordlist">
           {visibleOrders.map((o) => {
             const imgs = listImages[o.id] || {};
-            const orderSizeList = getOrderSizeList(o, sizeSystems);
+            const orderSizeList = trimSizeRangeToOrdered(getOrderSizeList(o, sizeSystems), o.sizes);
             const swatchSlots = [
               { key: "fabric", label: "Main Fabric", img: imgs.imgFabric, text: o.fabric },
               ...["acc1", "acc2", "acc3", "acc4"].map((key) => {
@@ -2314,11 +2339,11 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
               <div className="bbp-ordlcard" key={o.id}>
                 <div className="bbp-ordlcard-photo">
                   <div className="bbp-ordlcard-tag">・{o.item}</div>
-                  <div className="bbp-ordlcard-img">
-                    {imgs.imgModel
-                      ? <img src={imgs.imgModel} alt="" onClick={() => setLightbox(imgs.imgModel)} />
-                      : <div className="bbp-ordlcard-noimg">No Photo</div>}
-                  </div>
+                  {imgs.imgModel && (
+                    <div className="bbp-ordlcard-img">
+                      <img src={imgs.imgModel} alt="" onClick={() => setLightbox(imgs.imgModel)} />
+                    </div>
+                  )}
                 </div>
 
                 <div className="bbp-ordlcard-body">
@@ -3375,9 +3400,6 @@ function Style() {
         display: flex; align-items: center; justify-content: center; overflow: hidden;
       }
       .bbp-ordlcard-img img { width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }
-      .bbp-ordlcard-noimg {
-        font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft);
-      }
       .bbp-ordlcard-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
       .bbp-ordlcard-headrow { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
       .bbp-ordlcard-headtext { min-width: 0; }
