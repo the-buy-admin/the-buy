@@ -257,9 +257,26 @@ function computeOrderTotals(form) {
   return { totalUnits, wsplb, totalWSP, totalWSPLB, rp, erp, markup };
 }
 
+// iPhones save photos as HEIC/HEIF by default. Browsers' <img>/canvas can't
+// decode that format at all (Chrome, Firefox, Edge - even Safari's support is
+// inconsistent), so a HEIC upload used to fail decoding silently and leave
+// the order with no photo. Detect it by MIME type or, since some mobile
+// browsers hand over HEIC files with a blank `file.type`, by extension too.
+function isHeicFile(file) {
+  const type = (file.type || "").toLowerCase();
+  if (type === "image/heic" || type === "image/heif") return true;
+  if (!type) return /\.hei[cf]$/i.test(file.name || "");
+  return false;
+}
+
 // Downscales an uploaded image before storing it (persistent storage has a
 // 5MB-per-key ceiling, and raw camera photos as base64 blow past that fast).
-function resizeImageFile(file, maxDim = 1200, quality = 0.85) {
+async function resizeImageFile(file, maxDim = 1200, quality = 0.85) {
+  if (isHeicFile(file)) {
+    const heic2any = (await import("heic2any")).default;
+    const converted = await heic2any({ blob: file, toType: "image/jpeg", quality });
+    file = Array.isArray(converted) ? converted[0] : converted;
+  }
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("read failed"));
@@ -1367,7 +1384,9 @@ function fmt2(n) {
 function ImageDropZone({ label, value, onChange }) {
   const [dragOver, setDragOver] = useState(false);
   const handleFile = async (file) => {
-    if (!file || !file.type.startsWith("image/")) return;
+    if (!file) return;
+    const looksLikeImage = file.type.startsWith("image/") || isHeicFile(file);
+    if (!looksLikeImage) return;
     try {
       const dataUrl = await resizeImageFile(file);
       onChange(dataUrl);
