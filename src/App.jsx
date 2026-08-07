@@ -1229,7 +1229,7 @@ function TablePane({
                       value={r.plan.local}
                       round={0}
                       thousands
-                      width={100}
+                      width={86}
                       onCommit={(v) => setEntry(r.brand.id, currentSeason.id, "plan", "local", v)}
                     />
                   </td>
@@ -1237,7 +1237,7 @@ function TablePane({
                     {isJPY ? <span className="bbp-fixed">—</span> : (
                       <EditableNumber
                         value={r.plan.rate}
-                        width={64}
+                        width={56}
                         align="right"
                         onCommit={(v) => setEntry(r.brand.id, currentSeason.id, "plan", "rate", v)}
                       />
@@ -1259,7 +1259,7 @@ function TablePane({
                         value={r.actual.local}
                         round={0}
                         thousands
-                        width={100}
+                        width={86}
                         onCommit={(v) => setEntry(r.brand.id, currentSeason.id, "actual", "local", v)}
                       />
                     )}
@@ -1270,7 +1270,7 @@ function TablePane({
                     ) : isJPY ? <span className="bbp-fixed">—</span> : (
                       <EditableNumber
                         value={r.actual.rate}
-                        width={64}
+                        width={56}
                         align="right"
                         onCommit={(v) => setEntry(r.brand.id, currentSeason.id, "actual", "rate", v)}
                       />
@@ -2620,7 +2620,7 @@ function LaunchPlanPane({ masters, sortedSeasons, orders, launchPlan, setLaunchP
               <td className="bbp-td-brand">Sales Plan</td>
               {monthCols.map((c) => (
                 <td key={c.key}>
-                  <EditableNumber value={salesPlan[c.key]} round={0} thousands width={90} onCommit={(v) => setSalesPlanValue(c.key, v)} />
+                  <EditableNumber value={salesPlan[c.key]} round={0} thousands width={80} onCommit={(v) => setSalesPlanValue(c.key, v)} />
                 </td>
               ))}
               <td className="bbp-td-jpy bbp-td-jpy--plan">¥{fmtJPY(salesPlanTotal)}</td>
@@ -2658,7 +2658,7 @@ function LaunchPlanPane({ masters, sortedSeasons, orders, launchPlan, setLaunchP
                   </td>
                   {monthCols.map((c) => (
                     <td key={c.key}>
-                      <EditableNumber value={eventValues[ev.id]?.[c.key]} round={0} thousands width={90} onCommit={(v) => setEventValue(ev.id, c.key, v)} />
+                      <EditableNumber value={eventValues[ev.id]?.[c.key]} round={0} thousands width={80} onCommit={(v) => setEventValue(ev.id, c.key, v)} />
                     </td>
                   ))}
                   <td className="bbp-td-jpy">¥{fmtJPY(total)}</td>
@@ -3230,7 +3230,7 @@ function Style() {
 
       .bbp-tablewrap { background: var(--surface); border: 1px solid var(--line); border-radius: 0; overflow: auto; max-height: 640px; }
       .bbp-table { border-collapse: collapse; width: 100%; font-size: 12px; }
-      .bbp-table th, .bbp-table td { padding: 8px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+      .bbp-table th, .bbp-table td { padding: 6px 5px; border-bottom: 1px solid var(--line); white-space: nowrap; }
       .bbp-table thead th {
         font-family: var(--font-sans); font-weight: 400; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
         color: var(--ink-soft); text-align: center; background: var(--bg); line-height: 1.5;
@@ -3255,7 +3255,7 @@ function Style() {
       .bbp-table tfoot td { font-family: var(--font-mono); border-top: 1px solid var(--ink); border-bottom: none; background: var(--bg); }
 
       .bbp-input {
-        border: 1px solid transparent; background: transparent; padding: 4px 6px; border-radius: 0;
+        border: 1px solid transparent; background: transparent; padding: 3px 4px; border-radius: 0;
         font-size: 12px; font-weight: 300; color: var(--ink); text-align: right;
       }
       .bbp-input:hover { border-bottom: 1px solid var(--line); }
