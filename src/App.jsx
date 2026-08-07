@@ -1059,6 +1059,7 @@ export default function App() {
             orders={orders}
             seasonPlanTotal={seasonPlanTotal}
             seasonActualTotal={seasonActualTotal}
+            seasonYoyTotal={seasonYoyTotal}
             vsPlanTotalPct={vsPlanTotalPct}
             yoyTotalPct={yoyTotalPct}
             showInactive={showInactive}
@@ -1144,17 +1145,19 @@ export default function App() {
 
 function TablePane({
   sortedSeasons, seasonId, setSeasonId, currentSeason, rows, orders,
-  seasonPlanTotal, seasonActualTotal, vsPlanTotalPct, yoyTotalPct,
+  seasonPlanTotal, seasonActualTotal, seasonYoyTotal, vsPlanTotalPct, yoyTotalPct,
   showInactive, setShowInactive, setEntry,
 }) {
+  const prevYearShort = currentSeason ? String((currentSeason.year - 1) % 100).padStart(2, "0") : "";
   const yoyLabel = currentSeason
     ? (
       <>
         <span style={{ textTransform: "lowercase" }}>vs</span>
-        {String((currentSeason.year - 1) % 100).padStart(2, "0")}{currentSeason.type}
+        {prevYearShort}{currentSeason.type}
       </>
     )
     : "YoY";
+  const prevYearActLabel = currentSeason ? `${prevYearShort}${currentSeason.type} ACT` : "PY ACT";
   return (
     <div className="bbp-pane">
       <header className="bbp-pane-head">
@@ -1206,6 +1209,7 @@ function TablePane({
               <th>ACT<br />Share</th>
               <th className="bbp-th-bold">vs Plan</th>
               <th className="bbp-th-bold">{yoyLabel}</th>
+              <th>{prevYearActLabel}</th>
             </tr>
           </thead>
           <tbody>
@@ -1234,7 +1238,7 @@ function TablePane({
                       <EditableNumber
                         value={r.plan.rate}
                         width={64}
-                        align="center"
+                        align="right"
                         onCommit={(v) => setEntry(r.brand.id, currentSeason.id, "plan", "rate", v)}
                       />
                     )}
@@ -1267,7 +1271,7 @@ function TablePane({
                       <EditableNumber
                         value={r.actual.rate}
                         width={64}
-                        align="center"
+                        align="right"
                         onCommit={(v) => setEntry(r.brand.id, currentSeason.id, "actual", "rate", v)}
                       />
                     )}
@@ -1281,6 +1285,7 @@ function TablePane({
                   <td className="bbp-td-num bbp-td-bold">
                     {yoy === null ? "—" : <Pill tone={yoy >= 1 ? "positive" : "negative"}>{fmtPct(yoy)}</Pill>}
                   </td>
+                  <td className="bbp-td-jpy">{r.yoyActualJPY ? `¥${fmtJPY(r.yoyActualJPY)}` : "—"}</td>
                 </tr>
               );
             })}
@@ -1295,6 +1300,7 @@ function TablePane({
               <td>100%</td>
               <td className="bbp-td-bold">{fmtPct(vsPlanTotalPct)}</td>
               <td className="bbp-td-bold">{fmtPct(yoyTotalPct)}</td>
+              <td className="bbp-td-jpy">¥{fmtJPY(seasonYoyTotal)}</td>
             </tr>
           </tfoot>
         </table>
@@ -3224,19 +3230,19 @@ function Style() {
 
       .bbp-tablewrap { background: var(--surface); border: 1px solid var(--line); border-radius: 0; overflow: auto; max-height: 640px; }
       .bbp-table { border-collapse: collapse; width: 100%; font-size: 12px; }
-      .bbp-table th, .bbp-table td { padding: 10px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+      .bbp-table th, .bbp-table td { padding: 8px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
       .bbp-table thead th {
         font-family: var(--font-sans); font-weight: 400; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
         color: var(--ink-soft); text-align: center; background: var(--bg); line-height: 1.5;
         position: sticky; top: 0; z-index: 3; box-sizing: border-box;
       }
-      .bbp-th-brand { text-align: left !important; position: sticky; left: 0; top: 0; background: var(--bg); z-index: 4; }
+      .bbp-th-brand { text-align: center !important; position: sticky; left: 0; top: 0; background: var(--bg); z-index: 4; }
       .bbp-table thead th.bbp-th-bold { font-weight: 700; color: var(--ink); }
 
-      .bbp-td-brand { text-align: left; font-weight: 400; position: sticky; left: 0; background: var(--surface); z-index: 1; vertical-align: middle; }
+      .bbp-td-brand { text-align: center; font-weight: 400; position: sticky; left: 0; background: var(--surface); z-index: 1; vertical-align: middle; }
       .bbp-row--inactive .bbp-td-brand { color: var(--ink-soft); font-style: normal; }
       .bbp-td-currency { text-align: center; color: var(--ink-soft); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.05em; }
-      .bbp-td-rate { text-align: center; }
+      .bbp-td-rate { text-align: right; }
       .bbp-td-num { text-align: right; font-family: var(--font-mono); font-weight: 300; }
       .bbp-td-jpy { text-align: right; font-family: var(--font-mono); font-weight: 400; }
       .bbp-td-jpy--plan { color: var(--ink-soft); }
@@ -3305,7 +3311,7 @@ function Style() {
       .bbp-table--payment td, .bbp-table--payment th { font-size: 11px; }
       .bbp-td-sublabel {
         font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
-        color: var(--ink-soft); white-space: nowrap;
+        color: var(--ink-soft); white-space: nowrap; text-align: center;
       }
       .bbp-payrow-first td { border-top: 1px solid var(--ink); border-bottom: 1px dotted var(--line); }
       .bbp-payrow-mid td { border-bottom: 1px dotted var(--line); }
