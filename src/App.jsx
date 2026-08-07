@@ -3229,7 +3229,7 @@ function Style() {
       .bbp-card-value { font-family: var(--font-mono); font-size: 21px; font-weight: 300; letter-spacing: 0.01em; }
 
       .bbp-tablewrap { background: var(--surface); border: 1px solid var(--line); border-radius: 0; overflow: auto; max-height: 640px; }
-      .bbp-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+      .bbp-table { border-collapse: collapse; width: auto; font-size: 12px; }
       .bbp-table th, .bbp-table td { padding: 6px 5px; border-bottom: 1px solid var(--line); white-space: nowrap; }
       .bbp-table thead th {
         font-family: var(--font-sans); font-weight: 400; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
