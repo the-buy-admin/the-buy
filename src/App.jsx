@@ -3230,7 +3230,10 @@ function Style() {
 
       .bbp-tablewrap { background: var(--surface); border: 1px solid var(--line); border-radius: 0; overflow: auto; max-height: 640px; }
       .bbp-table { border-collapse: collapse; width: auto; font-size: 12px; }
-      .bbp-table th, .bbp-table td { padding: 6px 5px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+      .bbp-table th, .bbp-table td {
+        padding: 6px 5px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); white-space: nowrap;
+      }
+      .bbp-table th:last-child, .bbp-table td:last-child { border-right: none; }
       .bbp-table thead th {
         font-family: var(--font-sans); font-weight: 400; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
         color: var(--ink-soft); text-align: center; background: var(--bg); line-height: 1.5;
@@ -3247,7 +3250,7 @@ function Style() {
       .bbp-td-jpy { text-align: right; font-family: var(--font-mono); font-weight: 400; }
       .bbp-td-jpy--plan { color: var(--ink-soft); }
       .bbp-td-jpy--actual { color: var(--ink); }
-      .bbp-table td.bbp-td-bold { font-weight: 700; }
+      .bbp-table td.bbp-td-bold { font-weight: 700; text-align: right; }
       .bbp-table td.bbp-td-bold .bbp-input { font-weight: 700; }
       .bbp-td-totallabel { text-align: right; font-weight: 500; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft); }
       .bbp-fixed { font-family: var(--font-mono); color: var(--ink-soft); padding: 0 6px; font-weight: 300; }
