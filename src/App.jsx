@@ -1259,7 +1259,7 @@ function TablePane({
           <thead>
             <tr>
               <th className="bbp-th-brand">Brand</th>
-              <th className="bbp-th-groupend">Currency</th>
+              <th className="bbp-th-currency bbp-th-groupend">Currency</th>
               <th className="bbp-th-bold">Plan<br />Local Amt</th>
               <th>Plan<br />Rate</th>
               <th className="bbp-th-bold">Plan<br />JPY</th>
@@ -2677,7 +2677,7 @@ function LaunchPlanPane({ masters, sortedSeasons, orders, launchPlan, setLaunchP
       </header>
 
       <div className="bbp-tablewrap">
-        <table className="bbp-table">
+        <table className="bbp-table bbp-table--ledger">
           <thead>
             <tr>
               <th className="bbp-th-brand">{launchPlan.fiscalYear}</th>
@@ -2826,7 +2826,7 @@ function PaymentPlanPane({ masters, sortedSeasons, orders, launchPlan, setLaunch
       </header>
 
       <div className="bbp-tablewrap">
-        <table className="bbp-table bbp-table--payment">
+        <table className="bbp-table bbp-table--payment bbp-table--ledger">
           <thead>
             <tr>
               <th className="bbp-th-brand">{launchPlan.fiscalYear}</th>
@@ -3338,16 +3338,30 @@ function Style() {
 
       .bbp-table tfoot td { font-family: var(--font-mono); border-top: 1px solid var(--ink); border-bottom: none; background: var(--bg); }
 
-      /* Purchase Plan table only: ledger look (black header/brand column on
-         white data cells, heavier rules between column groups) */
+      /* Ledger look, matching the original "By Brand" Excel ledger's actual
+         fill/font/border styling (read via openpyxl): black header row,
+         black Brand + Currency cells (header and data rows alike), plain
+         white numeric cells, thin rules between ordinary columns and
+         heavier rules at major column-group boundaries. */
       .bbp-table.bbp-table--ledger thead th { background: var(--ink); color: var(--bg); }
       .bbp-table.bbp-table--ledger thead th.bbp-th-bold { color: var(--bg); }
       .bbp-table.bbp-table--ledger .bbp-th-brand,
-      .bbp-table.bbp-table--ledger .bbp-td-brand { background: var(--ink); color: var(--bg); }
-      .bbp-table.bbp-table--ledger .bbp-row--inactive .bbp-td-brand { color: rgba(250, 250, 248, 0.55); }
+      .bbp-table.bbp-table--ledger .bbp-td-brand,
+      .bbp-table.bbp-table--ledger .bbp-th-currency,
+      .bbp-table.bbp-table--ledger .bbp-td-currency { background: var(--ink); color: var(--bg); }
+      .bbp-table.bbp-table--ledger .bbp-row--inactive .bbp-td-brand,
+      .bbp-table.bbp-table--ledger .bbp-row--inactive .bbp-td-currency { color: rgba(250, 250, 248, 0.55); }
       .bbp-table.bbp-table--ledger thead th.bbp-th-groupend { border-right: 2px solid var(--bg); }
       .bbp-table.bbp-table--ledger tbody td.bbp-td-groupend,
       .bbp-table.bbp-table--ledger tfoot td.bbp-td-groupend { border-right: 2px solid var(--ink); }
+      /* Launch Plan's Event row lives in the (now black) Brand column - its
+         tag/name-input/close-button default to dark-on-dark text, so flip
+         them to light for readability there. */
+      .bbp-table.bbp-table--ledger .bbp-td-brand .bbp-eventname { color: var(--bg); }
+      .bbp-table.bbp-table--ledger .bbp-td-brand .bbp-eventname:hover { border-color: var(--bg); }
+      .bbp-table.bbp-table--ledger .bbp-td-brand .bbp-eventname:focus { border-color: var(--bg); }
+      .bbp-table.bbp-table--ledger .bbp-td-brand .bbp-eventtag { color: var(--bg); border-color: var(--bg); }
+      .bbp-table.bbp-table--ledger .bbp-td-brand .bbp-chipclose { color: var(--bg); }
 
       .bbp-input {
         border: 1px solid transparent; background: transparent; padding: 3px 4px; border-radius: 0;
