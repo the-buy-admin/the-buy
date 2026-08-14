@@ -302,6 +302,59 @@ async function resizeImageFile(file, maxDim = 1200, quality = 0.85) {
 // Imported from the original "By Brand" Excel sheet (brand, currency, active).
 const SEED_BRANDS = [{"id": "32paradis", "name": "32PARADIS", "currency": "EUR", "active": false}, {"id": "archivio-jm-rivot", "name": "ARCHIVIO JM Rivot", "currency": "EUR", "active": false}, {"id": "bourrienne-paris-x", "name": "BOURRIENNE PARIS X", "currency": "EUR", "active": true}, {"id": "gs-studio", "name": "GS studio", "currency": "EUR", "active": true}, {"id": "ematyte", "name": "EMATYTE", "currency": "EUR", "active": true}, {"id": "faliero-sarti", "name": "Faliero Sarti", "currency": "EUR", "active": false}, {"id": "geoffrey-b-small", "name": "Geoffrey B Small Ⅱ", "currency": "EUR", "active": true}, {"id": "geoffrey-b-small-mens", "name": "Geoffrey B Small Mens", "currency": "EUR", "active": true}, {"id": "geoffrey-b-small-personal", "name": "Geoffrey B Small Personal", "currency": "EUR", "active": true}, {"id": "guidi", "name": "Guidi", "currency": "EUR", "active": true}, {"id": "horisaki", "name": "Horisaki", "currency": "EUR", "active": true}, {"id": "liwan", "name": "LIWAN", "currency": "EUR", "active": true}, {"id": "liwan-towell", "name": "LIWAN  TOWELL", "currency": "EUR", "active": true}, {"id": "geoffrey-b-small-2", "name": "Geoffrey B. Small", "currency": "EUR", "active": true}, {"id": "m-a", "name": "m.a+", "currency": "EUR", "active": true}, {"id": "ma-men-s", "name": "Ma+ Men's", "currency": "EUR", "active": true}, {"id": "ma-personal", "name": "Ma＋personal", "currency": "EUR", "active": true}, {"id": "maria-apron", "name": "Maria Apron", "currency": "EUR", "active": true}, {"id": "maria-turri", "name": "MARIA TURRI", "currency": "EUR", "active": true}, {"id": "maria-turri-2", "name": "MARIA TURRI Ⅱ", "currency": "EUR", "active": true}, {"id": "mirror-in-the-sky", "name": "Mirror in The Sky", "currency": "EUR", "active": true}, {"id": "nanna-pause", "name": "Nanna Pause", "currency": "EUR", "active": true}, {"id": "nitto", "name": "nitto", "currency": "EUR", "active": true}, {"id": "nosapluna", "name": "NOSAPLUNA", "currency": "EUR", "active": true}, {"id": "scha", "name": "scha", "currency": "EUR", "active": true}, {"id": "shoto", "name": "SHOTO", "currency": "EUR", "active": true}, {"id": "stouls", "name": "STOULS", "currency": "EUR", "active": true}, {"id": "boboutic", "name": "Boboutic", "currency": "EUR", "active": true}, {"id": "aehrr", "name": "AEHRR", "currency": "JPY", "active": true}, {"id": "bresciani", "name": "Bresciani", "currency": "JPY", "active": true}, {"id": "corgi", "name": "Corgi", "currency": "JPY", "active": true}, {"id": "kristensen", "name": "Kristensen", "currency": "JPY", "active": true}, {"id": "kristensen-high-summer", "name": "Kristensen High Summer", "currency": "JPY", "active": true}, {"id": "maison-fabre", "name": "Maison Fabre", "currency": "JPY", "active": true}, {"id": "private0204", "name": "Private0204", "currency": "JPY", "active": true}, {"id": "silvana-manetti", "name": "Silvana Manetti", "currency": "JPY", "active": true}, {"id": "stonesstone-zoo", "name": "stonesstone zoo", "currency": "JPY", "active": true}, {"id": "rose-carmine", "name": "Rose Carmine", "currency": "EUR", "active": true}, {"id": "tagliovivo", "name": "tagliovivo", "currency": "JPY", "active": true}, {"id": "the-row", "name": "THE ROW Ⅰ", "currency": "JPY", "active": true}, {"id": "the-row-2", "name": "THE ROW Ⅱ", "currency": "JPY", "active": true}, {"id": "oluhi", "name": "oluhi", "currency": "PLN", "active": true}, {"id": "isabella-stefanelli", "name": "isabella stefanelli", "currency": "GBP", "active": true}, {"id": "mariko-tsuchiyama", "name": "Mariko Tsuchiyama", "currency": "GBP", "active": true}, {"id": "atelier-inscere", "name": "Atelier Inscere", "currency": "EUR", "active": true}, {"id": "maria-la-rosa", "name": "Maria La Rosa", "currency": "EUR", "active": true}, {"id": "rosie-sugden", "name": "Rosie Sugden", "currency": "EUR", "active": true}];
 
+// One-time seed for the "Default IPC %" brand field, keyed by lowercased
+// brand name (averages worked out from past actuals). Brands not listed here
+// fall back to "N/A" for JPY (no import cost concept) or blank for everything
+// else, awaiting manual entry. A few JPY brands (Bresciani, Maria La Rosa,
+// ematyte) are deliberately left blank rather than "N/A" - see below.
+const DEFAULT_IPC_PCT_SEED = {
+  "scha": "65.3",
+  "shoto": "36.5",
+  "geoffrey b. small": "25.0",
+  "maria turri": "20.9",
+  "bourrienne paris x": "20.1",
+  "m.a+": "18.0",
+  "stouls": "17.2",
+  "atelier inscere": "16.6",
+  "nanna pause": "16.1",
+  "archivio jm rivot": "15.5",
+  "isabella stefanelli": "13.9",
+  "nitto": "12.7",
+  "mariko tsuchiyama": "11.8",
+  "mirror in the sky": "4.0",
+  "nosapluna": "0.0",
+  "bresciani": "",
+  "maria la rosa": "",
+  "ematyte": "",
+};
+
+// Applies the one-time Default IPC % seed to any brand that doesn't already
+// have the field set. Once a brand has a value (including an intentionally
+// blank ""), it's left alone on future runs.
+function seedDefaultIpcPct(brands) {
+  let changed = false;
+  const next = brands.map((b) => {
+    if (typeof b.defaultIpcPct !== "undefined") return b;
+    changed = true;
+    const key = (b.name || "").trim().toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(DEFAULT_IPC_PCT_SEED, key)) {
+      return { ...b, defaultIpcPct: DEFAULT_IPC_PCT_SEED[key] };
+    }
+    return { ...b, defaultIpcPct: b.currency === "JPY" ? "N/A" : "" };
+  });
+  return { brands: next, changed };
+}
+
+// Parses a brand's Default IPC % field (free text - can hold "N/A" or be
+// blank) into a usable number, or null when it isn't one.
+function parseDefaultIpcPct(value) {
+  if (value === undefined || value === null) return null;
+  const trimmed = String(value).trim();
+  if (trimmed === "" || trimmed.toUpperCase() === "N/A") return null;
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : null;
+}
+
 // Imported historical Plan/Actual figures, keyed as `${brandId}|${seasonId}|plan|actual`.
 const RAW_SEED_ENTRIES = {"32paradis|2021-FW|plan": {"local": 13800, "rate": 130.0}, "archivio-jm-rivot|2026-SS|plan": {"local": 6464.6465, "rate": 165.0}, "archivio-jm-rivot|2026-SS|actual": {"local": 5560, "rate": 0.0}, "archivio-jm-rivot|2025-SS|plan": {"local": 6464.6465, "rate": 165.0}, "archivio-jm-rivot|2025-SS|actual": {"local": 6410, "rate": 165.0}, "archivio-jm-rivot|2025-FW|plan": {"local": 6545.4545, "rate": 165.0}, "archivio-jm-rivot|2025-FW|actual": {"local": 3080, "rate": 165.0}, "archivio-jm-rivot|2024-FW|plan": {"local": 5729.8276, "rate": 163.0}, "archivio-jm-rivot|2024-FW|actual": {"local": 5830, "rate": 163.0}, "archivio-jm-rivot|2021-FW|plan": {"local": 2725, "rate": 130.0}, "bourrienne-paris-x|2026-SS|actual": {"local": 3919, "rate": 182.0}, "bourrienne-paris-x|2026-FW|plan": {"local": 3088, "rate": 188.0}, "bourrienne-paris-x|2026-FW|actual": {"local": 3088, "rate": 189.0}, "gs-studio|2026-FW|plan": {"local": 470, "rate": 189.0}, "gs-studio|2026-FW|actual": {"local": 2045, "rate": 189.0}, "ematyte|2026-SS|plan": {"local": 3232.3232, "rate": 165.0}, "ematyte|2026-FW|plan": {"local": 3054.5455, "rate": 165.0}, "ematyte|2025-SS|plan": {"local": 3232.3232, "rate": 165.0}, "ematyte|2025-SS|actual": {"local": 3060, "rate": 165.0}, "ematyte|2025-FW|plan": {"local": 4363.6364, "rate": 165.0}, "ematyte|2025-FW|actual": {"local": 5820, "rate": 165.0}, "ematyte|2024-SS|actual": {"local": 6150, "rate": 163.0}, "ematyte|2024-FW|plan": {"local": 5544.9945, "rate": 163.0}, "ematyte|2024-FW|actual": {"local": 3840, "rate": 163.0}, "ematyte|2023-SS|actual": {"local": 900, "rate": 146.5}, "ematyte|2023-FW|plan": {"local": 5603, "rate": 158.500089}, "ematyte|2021-SS|actual": {"local": 2780, "rate": 130.0}, "ematyte|2021-FW|plan": {"local": 3000, "rate": 130.0}, "faliero-sarti|2024-FW|plan": {"local": 6469.1602, "rate": 163.0}, "faliero-sarti|2024-FW|actual": {"local": 650000, "rate": 1.0}, "faliero-sarti|2023-SS|actual": {"local": 13789, "rate": 146.500036}, "faliero-sarti|2023-FW|plan": {"local": 6777, "rate": 158.500074}, "faliero-sarti|2022-FW|plan": {"local": 4979, "rate": 144.5}, "faliero-sarti|2021-FW|plan": {"local": 4576, "rate": 130.0}, "geoffrey-b-small|2023-SS|actual": {"local": 7993, "rate": 146.500063}, "geoffrey-b-small-mens|2022-FW|plan": {"local": 13504, "rate": 144.5}, "geoffrey-b-small-personal|2023-SS|actual": {"local": 3690, "rate": 146.5}, "geoffrey-b-small-personal|2021-FW|plan": {"local": 1134, "rate": 130.0}, "guidi|2021-SS|actual": {"local": 14200, "rate": 130.0}, "horisaki|2025-FW|plan": {"local": 2181.8182, "rate": 165.0}, "horisaki|2024-FW|actual": {"local": 2640, "rate": 163.0}, "liwan|2021-SS|actual": {"local": 2160, "rate": 130.0}, "liwan-towell|2023-SS|actual": {"local": 23945, "rate": 146.500021}, "liwan-towell|2023-FW|plan": {"local": 25945, "rate": 158.500019}, "liwan-towell|2021-SS|actual": {"local": 180, "rate": 130.0}, "geoffrey-b-small-2|2026-SS|plan": {"local": 22564.1026, "rate": 182.0}, "geoffrey-b-small-2|2026-SS|actual": {"local": 15088.125, "rate": 182.0}, "geoffrey-b-small-2|2026-FW|plan": {"local": 29333.3333, "rate": 189.0}, "geoffrey-b-small-2|2026-FW|actual": {"local": 44140, "rate": 189.0}, "geoffrey-b-small-2|2025-SS|plan": {"local": 35555.5556, "rate": 165.0}, "geoffrey-b-small-2|2025-SS|actual": {"local": 35690, "rate": 165.0}, "geoffrey-b-small-2|2025-FW|plan": {"local": 48000, "rate": 165.0}, "geoffrey-b-small-2|2025-FW|actual": {"local": 48000, "rate": 165.0}, "geoffrey-b-small-2|2024-SS|actual": {"local": 20778.125, "rate": 163.0}, "geoffrey-b-small-2|2024-FW|plan": {"local": 27724.9724, "rate": 163.0}, "geoffrey-b-small-2|2024-FW|actual": {"local": 41850.5, "rate": 163.0}, "geoffrey-b-small-2|2023-SS|actual": {"local": 17422, "rate": 146.5}, "geoffrey-b-small-2|2022-FW|plan": {"local": 18251, "rate": 144.5}, "geoffrey-b-small-2|2021-SS|actual": {"local": 38048, "rate": 130.0}, "m-a|2026-SS|plan": {"local": 29090.9091, "rate": 165.0}, "m-a|2026-SS|actual": {"local": 16640, "rate": 182.0}, "m-a|2026-FW|plan": {"local": 4285.7143, "rate": 189.0}, "m-a|2026-FW|actual": {"local": 3900, "rate": 189.0}, "m-a|2025-SS|plan": {"local": 29090.9091, "rate": 165.0}, "m-a|2025-SS|actual": {"local": 27195, "rate": 165.0}, "m-a|2025-FW|plan": {"local": 17706.6667, "rate": 165.0}, "m-a|2025-FW|actual": {"local": 16295, "rate": 165.0}, "m-a|2024-SS|actual": {"local": 32855, "rate": 163.0}, "m-a|2024-FW|plan": {"local": 33269.9668, "rate": 163.0}, "m-a|2024-FW|actual": {"local": 27545, "rate": 163.0}, "m-a|2023-SS|actual": {"local": 21685, "rate": 146.500023}, "m-a|2023-FW|plan": {"local": 9075, "rate": 158.500055}, "m-a|2022-SS|actual": {"local": 69185, "rate": 136.9}, "m-a|2022-FW|plan": {"local": 16980, "rate": 144.5}, "m-a|2021-SS|actual": {"local": 42095, "rate": 130.0}, "m-a|2021-FW|plan": {"local": 90885, "rate": 130.0}, "ma-men-s|2022-FW|plan": {"local": 31900, "rate": 144.5}, "ma-personal|2022-SS|actual": {"local": 2435, "rate": 136.9}, "ma-personal|2021-SS|actual": {"local": 1760, "rate": 130.0}, "ma-personal|2021-FW|plan": {"local": 6095, "rate": 130.0}, "maria-apron|2026-SS|plan": {"local": 2386.3636, "rate": 165.0}, "maria-apron|2026-FW|plan": {"local": 1527.2727, "rate": 165.0}, "maria-apron|2025-SS|plan": {"local": 2386.3636, "rate": 165.0}, "maria-apron|2025-FW|plan": {"local": 2181.8182, "rate": 165.0}, "maria-apron|2024-FW|plan": {"local": 3696.663, "rate": 163.0}, "maria-turri|2026-SS|plan": {"local": 4246.5616, "rate": 165.0}, "maria-turri|2026-SS|actual": {"local": 5000, "rate": 182.0}, "maria-turri|2026-FW|plan": {"local": 4285.7143, "rate": 189.0}, "maria-turri|2026-FW|actual": {"local": 3650, "rate": 189.0}, "maria-turri|2025-SS|plan": {"local": 4246.5616, "rate": 165.0}, "maria-turri|2025-SS|actual": {"local": 4890, "rate": 165.0}, "maria-turri|2025-FW|plan": {"local": 10909.0909, "rate": 165.0}, "maria-turri|2025-FW|actual": {"local": 3160, "rate": 165.0}, "maria-turri|2024-SS|actual": {"local": 4030, "rate": 163.0}, "maria-turri|2024-FW|plan": {"local": 5544.9945, "rate": 163.0}, "maria-turri|2024-FW|actual": {"local": 8940, "rate": 163.0}, "maria-turri|2022-SS|actual": {"local": 9056, "rate": 136.9}, "maria-turri|2022-FW|plan": {"local": 2110, "rate": 144.5}, "maria-turri|2021-SS|actual": {"local": 5270, "rate": 130.0}, "maria-turri|2021-FW|plan": {"local": 16695, "rate": 130.0}, "maria-turri-2|2024-SS|actual": {"local": 2180, "rate": 163.0}, "maria-turri-2|2021-SS|actual": {"local": 4980, "rate": 130.0}, "mirror-in-the-sky|2026-FW|plan": {"local": 4285.7143, "rate": 189.0}, "mirror-in-the-sky|2026-FW|actual": {"local": 4406, "rate": 189.0}, "mirror-in-the-sky|2025-FW|actual": {"local": 3376, "rate": 165.0}, "nanna-pause|2026-FW|plan": {"local": 7142.8571, "rate": 189.0}, "nanna-pause|2026-FW|actual": {"local": 6893, "rate": 189.0}, "nanna-pause|2025-FW|actual": {"local": 5320, "rate": 165.0}, "nitto|2026-SS|plan": {"local": 6086.7692, "rate": 209.3}, "nitto|2026-SS|actual": {"local": 6260, "rate": 182.0}, "nitto|2026-FW|plan": {"local": 7142.8571, "rate": 189.0}, "nitto|2026-FW|actual": {"local": 6203, "rate": 189.0}, "nitto|2025-SS|plan": {"local": 6464.6465, "rate": 165.0}, "nitto|2025-SS|actual": {"local": 7947, "rate": 165.0}, "nitto|2025-FW|plan": {"local": 21818.1818, "rate": 165.0}, "nitto|2025-FW|actual": {"local": 14909, "rate": 165.0}, "nitto|2024-SS|actual": {"local": 2208, "rate": 163.0}, "nitto|2024-FW|plan": {"local": 3696.663, "rate": 163.0}, "nitto|2024-FW|actual": {"local": 6994, "rate": 163.0}, "nosapluna|2026-SS|plan": {"local": 4400.8081, "rate": 165.0}, "nosapluna|2025-SS|plan": {"local": 4400.8081, "rate": 165.0}, "nosapluna|2024-SS|actual": {"local": 3890, "rate": 163.0}, "nosapluna|2024-FW|plan": {"local": 3696.663, "rate": 163.0}, "nosapluna|2024-FW|actual": {"local": 3020, "rate": 163.0}, "scha|2026-SS|plan": {"local": 1431.8182, "rate": 165.0}, "scha|2025-SS|plan": {"local": 1431.8182, "rate": 165.0}, "scha|2025-SS|actual": {"local": 1260, "rate": 165.0}, "scha|2024-SS|actual": {"local": 1350, "rate": 163.0}, "shoto|2026-SS|plan": {"local": 500000.04, "rate": 1.0}, "shoto|2025-SS|plan": {"local": 500000.04, "rate": 1.0}, "shoto|2025-SS|actual": {"local": 1464, "rate": 165.0}, "shoto|2024-SS|actual": {"local": 766500, "rate": 1.0}, "stouls|2026-SS|plan": {"local": 6464.6465, "rate": 165.0}, "stouls|2025-SS|plan": {"local": 6464.6465, "rate": 165.0}, "stouls|2025-SS|actual": {"local": 6132, "rate": 165.0}, "stouls|2025-FW|actual": {"local": 3984, "rate": 165.0}, "stouls|2024-SS|actual": {"local": 5647, "rate": 163.0}, "stouls|2024-FW|plan": {"local": 5544.9945, "rate": 163.0}, "stouls|2024-FW|actual": {"local": 6912, "rate": 163.0}, "stouls|2022-SS|actual": {"local": 5785, "rate": 136.9}, "stouls|2022-FW|plan": {"local": 5695, "rate": 144.5}, "stouls|2021-FW|plan": {"local": 14510, "rate": 130.0}, "boboutic|2026-FW|plan": {"local": 9818.1818, "rate": 165.0}, "boboutic|2026-FW|actual": {"local": 5280, "rate": 189.0}, "boboutic|2025-SS|plan": {"local": 6464.6465, "rate": 165.0}, "boboutic|2025-SS|actual": {"local": 6132, "rate": 165.0}, "boboutic|2025-FW|actual": {"local": 3984, "rate": 165.0}, "boboutic|2024-SS|actual": {"local": 5647, "rate": 163.0}, "boboutic|2024-FW|plan": {"local": 5544.9945, "rate": 163.0}, "boboutic|2024-FW|actual": {"local": 6912, "rate": 163.0}, "boboutic|2022-SS|actual": {"local": 5785, "rate": 136.9}, "boboutic|2022-FW|plan": {"local": 5695, "rate": 144.5}, "boboutic|2021-FW|plan": {"local": 14510, "rate": 130.0}, "aehrr|2026-SS|actual": {"local": 1231500, "rate": 1}, "aehrr|2026-FW|plan": {"local": 810000, "rate": 1}, "aehrr|2026-FW|actual": {"local": 1125905, "rate": 1}, "aehrr|2025-SS|actual": {"local": 324500, "rate": 1}, "aehrr|2025-FW|plan": {"local": 6545.454545454545, "rate": 1}, "aehrr|2025-FW|actual": {"local": 399300.00000000006, "rate": 1}, "bresciani|2026-SS|plan": {"local": 213333.3333333333, "rate": 1}, "bresciani|2026-SS|actual": {"local": 126720, "rate": 1}, "bresciani|2026-FW|plan": {"local": 270000, "rate": 1}, "bresciani|2026-FW|actual": {"local": 231120, "rate": 1}, "bresciani|2025-SS|plan": {"local": 213333.3333333333, "rate": 1}, "bresciani|2025-SS|actual": {"local": 228240, "rate": 1}, "bresciani|2025-FW|actual": {"local": 276840, "rate": 1}, "bresciani|2024-SS|actual": {"local": 200000, "rate": 1}, "bresciani|2024-FW|actual": {"local": 150000, "rate": 1}, "bresciani|2021-SS|actual": {"local": 266400, "rate": 1}, "bresciani|2021-FW|plan": {"local": 517750, "rate": 1}, "corgi|2025-FW|plan": {"local": 216000, "rate": 1}, "corgi|2024-FW|actual": {"local": 210895, "rate": 1}, "corgi|2021-SS|actual": {"local": 266400, "rate": 1}, "corgi|2021-FW|plan": {"local": 517750, "rate": 1}, "kristensen|2026-SS|plan": {"local": 5120000, "rate": 1}, "kristensen|2026-SS|actual": {"local": 5365800, "rate": 1}, "kristensen|2026-FW|plan": {"local": 1890000.0000000002, "rate": 1}, "kristensen|2026-FW|actual": {"local": 1903000, "rate": 1}, "kristensen|2025-SS|plan": {"local": 5120000, "rate": 1}, "kristensen|2025-SS|actual": {"local": 5135900, "rate": 1}, "kristensen|2025-FW|plan": {"local": 3600000, "rate": 1}, "kristensen|2025-FW|actual": {"local": 3619000, "rate": 1}, "kristensen|2024-SS|actual": {"local": 6564250, "rate": 1}, "kristensen|2024-FW|actual": {"local": 3615750, "rate": 1}, "kristensen|2023-SS|actual": {"local": 1756000, "rate": 1}, "kristensen|2023-FW|plan": {"local": 6146500, "rate": 1}, "kristensen|2022-SS|actual": {"local": 3296000, "rate": 1}, "kristensen|2022-FW|plan": {"local": 1972000, "rate": 1}, "kristensen|2021-SS|actual": {"local": 1837450, "rate": 1}, "kristensen|2021-FW|plan": {"local": 6816500, "rate": 1}, "kristensen-high-summer|2026-SS|plan": {"local": 3413333.3333333335, "rate": 1}, "kristensen-high-summer|2026-SS|actual": {"local": 2261050, "rate": 1}, "kristensen-high-summer|2025-SS|plan": {"local": 3413333.3333333335, "rate": 1}, "kristensen-high-summer|2025-SS|actual": {"local": 3402850, "rate": 1}, "kristensen-high-summer|2024-SS|actual": {"local": 1454750, "rate": 1}, "kristensen-high-summer|2023-SS|actual": {"local": 6418000, "rate": 1}, "kristensen-high-summer|2022-SS|actual": {"local": 1590000, "rate": 1}, "kristensen-high-summer|2021-SS|actual": {"local": 2967000, "rate": 1}, "maison-fabre|2021-SS|actual": {"local": 266400, "rate": 1}, "maison-fabre|2021-FW|plan": {"local": 517750, "rate": 1}, "private0204|2026-SS|plan": {"local": 2133333.3333333335, "rate": 1}, "private0204|2026-SS|actual": {"local": 574200, "rate": 1}, "private0204|2026-FW|plan": {"local": 1800000, "rate": 1}, "private0204|2026-FW|actual": {"local": 132000, "rate": 1}, "private0204|2025-SS|plan": {"local": 2133333.3333333335, "rate": 1}, "private0204|2025-SS|actual": {"local": 2170850, "rate": 1}, "private0204|2025-FW|plan": {"local": 1800000, "rate": 1}, "private0204|2025-FW|actual": {"local": 1606000, "rate": 1}, "private0204|2024-SS|actual": {"local": 2012450, "rate": 1}, "private0204|2024-FW|actual": {"local": 1871100, "rate": 1}, "private0204|2023-SS|actual": {"local": 2036000, "rate": 1}, "private0204|2023-FW|plan": {"local": 2024500, "rate": 1}, "private0204|2022-SS|actual": {"local": 3127000, "rate": 1}, "private0204|2022-FW|plan": {"local": 1183000, "rate": 1}, "private0204|2021-SS|actual": {"local": 1928500, "rate": 1}, "private0204|2021-FW|plan": {"local": 2397500, "rate": 1}, "silvana-manetti|2024-FW|plan": {"local": 1848.331490797546, "rate": 1}, "silvana-manetti|2024-FW|actual": {"local": 170400, "rate": 1}, "stonesstone-zoo|2023-SS|actual": {"local": 2370000, "rate": 1}, "stonesstone-zoo|2023-FW|plan": {"local": 347400, "rate": 1}, "stonesstone-zoo|2022-FW|plan": {"local": 1359600, "rate": 1}, "rose-carmine|2023-FW|plan": {"local": 6024, "rate": 158.5}, "rose-carmine|2022-FW|plan": {"local": 2150, "rate": 144.5}, "tagliovivo|2026-SS|plan": {"local": 533333.3333333334, "rate": 1}, "tagliovivo|2026-SS|actual": {"local": 1202300, "rate": 1}, "tagliovivo|2026-FW|plan": {"local": 540000, "rate": 1}, "tagliovivo|2026-FW|actual": {"local": 1885150, "rate": 1}, "tagliovivo|2025-SS|plan": {"local": 533333.3333333334, "rate": 1}, "tagliovivo|2025-SS|actual": {"local": 900900, "rate": 1}, "tagliovivo|2025-FW|plan": {"local": 1080000, "rate": 1}, "tagliovivo|2025-FW|actual": {"local": 583000, "rate": 1}, "tagliovivo|2024-SS|actual": {"local": 1009800, "rate": 1}, "tagliovivo|2024-FW|actual": {"local": 353100.00000000006, "rate": 1}, "tagliovivo|2023-FW|plan": {"local": 2528400, "rate": 1}, "tagliovivo|2021-SS|actual": {"local": 275000, "rate": 1}, "the-row|2026-SS|plan": {"local": 2560000, "rate": 1}, "the-row|2026-SS|actual": {"local": 5537000, "rate": 1}, "the-row|2026-FW|plan": {"local": 2700000, "rate": 1}, "the-row|2026-FW|actual": {"local": 3167500, "rate": 1}, "the-row|2025-SS|plan": {"local": 2560000, "rate": 1}, "the-row|2025-SS|actual": {"local": 2326500, "rate": 1}, "the-row|2025-FW|plan": {"local": 5435100, "rate": 1}, "the-row|2025-FW|actual": {"local": 5435100, "rate": 1}, "the-row|2024-SS|actual": {"local": 3173500, "rate": 1}, "the-row|2024-FW|plan": {"local": 4142572.9537500003, "rate": 1}, "the-row|2024-FW|actual": {"local": 4741500, "rate": 1}, "the-row|2023-SS|actual": {"local": 1941000, "rate": 1}, "the-row|2023-FW|plan": {"local": 3973000, "rate": 1}, "the-row|2022-SS|actual": {"local": 3529000, "rate": 1}, "the-row|2022-FW|plan": {"local": 1656500, "rate": 1}, "the-row|2021-SS|actual": {"local": 857000, "rate": 1}, "the-row|2021-FW|plan": {"local": 920000, "rate": 1}, "the-row-2|2026-SS|plan": {"local": 1706666.6666666667, "rate": 1}, "the-row-2|2026-SS|actual": {"local": 2275500, "rate": 1}, "the-row-2|2026-FW|plan": {"local": 1890000.0000000002, "rate": 1}, "the-row-2|2026-FW|actual": {"local": 1488500, "rate": 1}, "the-row-2|2025-SS|plan": {"local": 1706666.6666666667, "rate": 1}, "the-row-2|2025-SS|actual": {"local": 3861550, "rate": 1}, "the-row-2|2025-FW|actual": {"local": 2760500, "rate": 1}, "the-row-2|2024-SS|actual": {"local": 3180500, "rate": 1}, "the-row-2|2024-FW|plan": {"local": 2108946.231, "rate": 1}, "the-row-2|2024-FW|actual": {"local": 2314500, "rate": 1}, "the-row-2|2023-SS|actual": {"local": 1315000, "rate": 1}, "the-row-2|2023-FW|plan": {"local": 4114000, "rate": 1}, "the-row-2|2022-SS|actual": {"local": 1393500, "rate": 1}, "the-row-2|2022-FW|plan": {"local": 1493000, "rate": 1}, "the-row-2|2021-FW|plan": {"local": 4185000, "rate": 1}, "oluhi|2026-SS|plan": {"local": 17073.1707, "rate": 41.0}, "oluhi|2025-SS|plan": {"local": 17073.1707, "rate": 41.0}, "oluhi|2025-FW|plan": {"local": 4363.6364, "rate": 165.0}, "oluhi|2024-FW|plan": {"local": 3696.663, "rate": 163.0}, "isabella-stefanelli|2026-SS|plan": {"local": 10512.8197, "rate": 195.0}, "isabella-stefanelli|2026-SS|actual": {"local": 7250, "rate": 195.0}, "isabella-stefanelli|2026-FW|plan": {"local": 14727.2727, "rate": 220.0}, "isabella-stefanelli|2026-FW|actual": {"local": 5330, "rate": 220.0}, "isabella-stefanelli|2025-SS|plan": {"local": 10512.8197, "rate": 195.0}, "isabella-stefanelli|2025-SS|actual": {"local": 13369, "rate": 195.0}, "isabella-stefanelli|2025-FW|plan": {"local": 17052.6316, "rate": 190.0}, "isabella-stefanelli|2025-FW|actual": {"local": 13714, "rate": 190.0}, "isabella-stefanelli|2024-SS|actual": {"local": 15189, "rate": 181.94}, "isabella-stefanelli|2024-FW|actual": {"local": 9726, "rate": 190.0}, "isabella-stefanelli|2023-SS|actual": {"local": 12764, "rate": 161.899013}, "isabella-stefanelli|2022-SS|actual": {"local": 16568, "rate": 161.899}, "isabella-stefanelli|2022-FW|plan": {"local": 16684, "rate": 161.899}, "isabella-stefanelli|2021-SS|actual": {"local": 22340, "rate": 150.9644}, "isabella-stefanelli|2021-FW|plan": {"local": 25564, "rate": 150.9644}, "mariko-tsuchiyama|2023-SS|actual": {"local": 3700, "rate": 161.898919}, "mariko-tsuchiyama|2023-FW|plan": {"local": 6000, "rate": 181.94}, "mariko-tsuchiyama|2022-FW|plan": {"local": 1740, "rate": 161.899}, "mariko-tsuchiyama|2021-SS|actual": {"local": 2577, "rate": 150.9644}, "mariko-tsuchiyama|2021-FW|plan": {"local": 3525, "rate": 150.9644}, "atelier-inscere|2025-FW|actual": {"local": 1980, "rate": 165.0}, "rosie-sugden|2025-FW|actual": {"local": 1710, "rate": 190.0}};
 
@@ -605,6 +658,14 @@ export default function App() {
       if (migrated) {
         o = migratedOrders;
         try { await window.storage.set("bybrand:orders", JSON.stringify(o), false); } catch (err) { /* will retry on next save */ }
+      }
+
+      // One-time seed: give every brand a "Default IPC %" value if it
+      // doesn't have one yet (see seedDefaultIpcPct for the rules).
+      const ipcSeed = seedDefaultIpcPct(m.brands);
+      if (ipcSeed.changed) {
+        m = { ...m, brands: ipcSeed.brands };
+        try { await window.storage.set("bybrand:masters", JSON.stringify(m), false); } catch (err) { /* will retry on next save */ }
       }
 
       setMasters(m);
@@ -1194,11 +1255,11 @@ function TablePane({
       </div>
 
       <div className="bbp-tablewrap">
-        <table className="bbp-table">
+        <table className="bbp-table bbp-table--ledger">
           <thead>
             <tr>
               <th className="bbp-th-brand">Brand</th>
-              <th>Currency</th>
+              <th className="bbp-th-groupend">Currency</th>
               <th className="bbp-th-bold">Plan<br />Local Amt</th>
               <th>Plan<br />Rate</th>
               <th className="bbp-th-bold">Plan<br />JPY</th>
@@ -1222,7 +1283,7 @@ function TablePane({
               return (
                 <tr key={r.brand.id} className={r.brand.active ? "" : "bbp-row--inactive"}>
                   <td className="bbp-td-brand">{r.brand.name}</td>
-                  <td className="bbp-td-currency">{r.currency.code}</td>
+                  <td className="bbp-td-currency bbp-td-groupend">{r.currency.code}</td>
 
                   <td className="bbp-td-bold">
                     <EditableNumber
@@ -1244,7 +1305,7 @@ function TablePane({
                     )}
                   </td>
                   <td className="bbp-td-jpy bbp-td-jpy--plan bbp-td-bold">¥{fmtJPY(r.planJPY)}</td>
-                  <td className="bbp-td-num">{fmtPct(planShare)}</td>
+                  <td className="bbp-td-num bbp-td-groupend">{fmtPct(planShare)}</td>
 
                   <td className="bbp-td-bold">
                     {r.actualSource === "orders" ? (
@@ -1278,7 +1339,7 @@ function TablePane({
                   </td>
                   <td className="bbp-td-jpy bbp-td-jpy--actual bbp-td-bold">¥{fmtJPY(r.actualJPY)}</td>
 
-                  <td className="bbp-td-num">{fmtPct(share)}</td>
+                  <td className="bbp-td-num bbp-td-groupend">{fmtPct(share)}</td>
                   <td className="bbp-td-num bbp-td-bold">
                     {vsPlan === null ? "—" : <Pill tone={vsPlan >= 0 ? "positive" : "negative"}>{fmtPct(vsPlan)}</Pill>}
                   </td>
@@ -1294,10 +1355,10 @@ function TablePane({
             <tr>
               <td colSpan={4} className="bbp-td-totallabel">Total</td>
               <td className="bbp-td-jpy bbp-td-jpy--plan bbp-td-bold">¥{fmtJPY(seasonPlanTotal)}</td>
-              <td>100%</td>
+              <td className="bbp-td-groupend">100%</td>
               <td colSpan={2}></td>
               <td className="bbp-td-jpy bbp-td-jpy--actual bbp-td-bold">¥{fmtJPY(seasonActualTotal)}</td>
-              <td>100%</td>
+              <td className="bbp-td-groupend">100%</td>
               <td className="bbp-td-bold">{fmtPct(vsPlanTotalPct)}</td>
               <td className="bbp-td-bold">{fmtPct(yoyTotalPct)}</td>
               <td className="bbp-td-jpy">¥{fmtJPY(seasonYoyTotal)}</td>
@@ -1604,12 +1665,15 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
     const defaultBrandId = masters.brands.find((b) => b.active)?.id || masters.brands[0]?.id || "";
     const brand = brandMap[defaultBrandId];
     const currency = brand ? brand.currency : "EUR";
+    const blank = blankOrderForm();
+    const ipc = parseDefaultIpcPct(brand?.defaultIpcPct);
     setForm({
-      ...blankOrderForm(),
+      ...blank,
       brandId: defaultBrandId,
       seasonId: seasonId || sortedSeasons[0]?.id || "",
       currency,
       exrate: DEFAULT_RATES[currency] || 165,
+      afipcPct: ipc !== null ? ipc : blank.afipcPct,
     });
     setView("form");
   };
@@ -1628,7 +1692,14 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
   const handleBrandChange = (brandId) => {
     const brand = brandMap[brandId];
     const currency = brand ? brand.currency : form.currency;
-    setForm((f) => ({ ...f, brandId, currency, exrate: DEFAULT_RATES[currency] || f.exrate }));
+    const ipc = parseDefaultIpcPct(brand?.defaultIpcPct);
+    setForm((f) => ({
+      ...f,
+      brandId,
+      currency,
+      exrate: DEFAULT_RATES[currency] || f.exrate,
+      afipcPct: ipc !== null ? ipc : f.afipcPct,
+    }));
   };
 
   const setSize = (size, qty) => {
@@ -2863,6 +2934,16 @@ function MastersPane({
               <select className="bbp-select" value={b.currency} onChange={(e) => updateBrand(b.id, { currency: e.target.value })}>
                 {masters.currencies.map((c) => <option key={c.code} value={c.code}>{c.code}</option>)}
               </select>
+              <label className="bbp-brandipc">
+                <span>Default IPC %</span>
+                <input
+                  className="bbp-input"
+                  style={{ width: 72 }}
+                  value={b.defaultIpcPct ?? ""}
+                  placeholder={b.currency === "JPY" ? "N/A" : "—"}
+                  onChange={(e) => updateBrand(b.id, { defaultIpcPct: e.target.value })}
+                />
+              </label>
               <label className="bbp-check">
                 <input type="checkbox" checked={b.active} onChange={(e) => updateBrand(b.id, { active: e.target.checked })} />
                 Visible
@@ -3257,6 +3338,17 @@ function Style() {
 
       .bbp-table tfoot td { font-family: var(--font-mono); border-top: 1px solid var(--ink); border-bottom: none; background: var(--bg); }
 
+      /* Purchase Plan table only: ledger look (black header/brand column on
+         white data cells, heavier rules between column groups) */
+      .bbp-table.bbp-table--ledger thead th { background: var(--ink); color: var(--bg); }
+      .bbp-table.bbp-table--ledger thead th.bbp-th-bold { color: var(--bg); }
+      .bbp-table.bbp-table--ledger .bbp-th-brand,
+      .bbp-table.bbp-table--ledger .bbp-td-brand { background: var(--ink); color: var(--bg); }
+      .bbp-table.bbp-table--ledger .bbp-row--inactive .bbp-td-brand { color: rgba(250, 250, 248, 0.55); }
+      .bbp-table.bbp-table--ledger thead th.bbp-th-groupend { border-right: 2px solid var(--bg); }
+      .bbp-table.bbp-table--ledger tbody td.bbp-td-groupend,
+      .bbp-table.bbp-table--ledger tfoot td.bbp-td-groupend { border-right: 2px solid var(--ink); }
+
       .bbp-input {
         border: 1px solid transparent; background: transparent; padding: 3px 4px; border-radius: 0;
         font-size: 12px; font-weight: 300; color: var(--ink); text-align: right;
@@ -3284,6 +3376,7 @@ function Style() {
       .bbp-masterrow { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); }
       .bbp-currencycode { font-family: var(--font-mono); font-weight: 500; width: 48px; letter-spacing: 0.05em; }
       .bbp-currencyname { flex: 1; color: var(--ink-soft); font-size: 12px; }
+      .bbp-brandipc { display: flex; align-items: center; gap: 6px; font-size: 10px; letter-spacing: 0.04em; color: var(--ink-soft); }
 
       .bbp-tpllist { display: flex; flex-direction: column; gap: 20px; }
       .bbp-tplcard { border: 1px solid var(--line); padding: 18px 20px; display: flex; flex-direction: column; gap: 16px; }
