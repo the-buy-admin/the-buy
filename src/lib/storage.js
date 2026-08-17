@@ -10,6 +10,8 @@
 import { initializeApp } from "firebase/app";
 import {
   getAuth,
+  setPersistence,
+  browserLocalPersistence,
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
@@ -23,8 +25,12 @@ import {
 import { firebaseConfig, SHARED_EMAIL } from "./firebase-config.js";
 
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
+export const auth = getAuth(app);
 const db = getDatabase(app);
+// Explicit rather than relying on the SDK's default, so the Firebase Auth
+// session (not the app's own decryption key - see the note at the top of
+// this file) survives a browser/tab restart, not just a same-tab reload.
+const persistenceReady = setPersistence(auth, browserLocalPersistence);
 
 const SALT_PATH = "meta/salt";
 const VERIFIER_PATH = "meta/verifier";
@@ -106,6 +112,7 @@ async function decryptString(b64) {
 // Signs in with the shared account, then derives/verifies the encryption key.
 // Throws on wrong password or network failure.
 export async function login(password) {
+  await persistenceReady; // must resolve before signIn for it to apply to this session
   await signInWithEmailAndPassword(auth, SHARED_EMAIL, password);
 
   const saltSnap = await dbGet(ref(db, SALT_PATH));

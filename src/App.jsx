@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from "react";
 import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, BarChart, Cell,
@@ -379,7 +379,7 @@ function seedSeasons() {
 }
 
 function seasonOrderValue(s) {
-  return s.year * 2 + (s.type === "SS" ? 0 : 1);
+  return Number(s.year) * 2 + (s.type === "SS" ? 0 : 1);
 }
 
 function sortSeasons(list) {
@@ -407,6 +407,16 @@ const fmtNum = (n, digits = 2) => {
   if (n === null || n === undefined || Number.isNaN(n)) return "";
   return Number(n).toString();
 };
+
+// Display-only season label formatting - e.g. "2026 SS" -> "2026 SPRING/SUMMER".
+// Stored season ids/types/labels (Firebase, "26SS"-style keys, etc.) are
+// untouched; this only affects what's rendered on screen.
+const SEASON_TYPE_LABELS = { SS: "Spring/Summer", FW: "Fall/Winter" };
+function formatSeasonLabel(season, { upper = false } = {}) {
+  if (!season) return "";
+  const typeLabel = SEASON_TYPE_LABELS[season.type] || season.type;
+  return `${season.year} ${upper ? typeLabel.toUpperCase() : typeLabel}`;
+}
 
 function entryKey(brandId, seasonId, kind) {
   return `${brandId}|${seasonId}|${kind}`;
@@ -785,45 +795,64 @@ export default function App() {
     ? sortedSeasons.find((s) => s.type === currentSeason.type && s.year === currentSeason.year - 1)
     : null;
 
-  const rows = useMemo(() => {
-    if (!masters || !currentSeason) return [];
-    return activeBrands.map((b) => {
+  // Computes the full brand-level breakdown for ANY season (not just the
+  // selected one) - reused to build both the single-season `rows` below and
+  // the horizontally-scrollable multi-season Purchase Plan table.
+  const computeRowsForSeason = useCallback((season) => {
+    if (!masters || !season) return { rows: [], planTotal: 0, actualTotal: 0, yoyTotal: 0, vsPlanPct: null, yoyPct: null };
+    const prevYear = sortedSeasons.find((s) => s.type === season.type && s.year === season.year - 1);
+    const rowsForSeason = activeBrands.map((b) => {
       const cur = currencyMap[b.currency] || { code: b.currency };
-      let plan = getEntry(b.id, currentSeason.id, "plan");
-      if (prevYearSeason && (plan.local === undefined || plan.rate === undefined)) {
-        const prevPlan = getEntry(b.id, prevYearSeason.id, "plan");
+      let plan = getEntry(b.id, season.id, "plan");
+      if (prevYear && (plan.local === undefined || plan.rate === undefined)) {
+        const prevPlan = getEntry(b.id, prevYear.id, "plan");
         plan = {
           ...plan,
           local: plan.local !== undefined ? plan.local : prevPlan.local,
           rate: plan.rate !== undefined ? plan.rate : prevPlan.rate,
         };
       }
-      const manualActual = getEntry(b.id, currentSeason.id, "actual");
-      const rollup = rollupOrdersForBrandSeason(orders, b.id, currentSeason.id);
+      const manualActual = getEntry(b.id, season.id, "actual");
+      const rollup = rollupOrdersForBrandSeason(orders, b.id, season.id);
       const actual = rollup ? { local: Math.round(rollup.local), rate: rollup.rate } : manualActual;
       const actualSource = rollup ? "orders" : "manual";
       const planJPY = computeJPY(plan.local, cur.code === "JPY" ? 1 : plan.rate, cur.code);
       const actualJPY = rollup ? rollup.jpy : computeJPY(actual.local, cur.code === "JPY" ? 1 : actual.rate, cur.code);
 
       let yoyActualJPY = null;
-      if (prevYearSeason) {
-        const prevRollup = rollupOrdersForBrandSeason(orders, b.id, prevYearSeason.id);
+      if (prevYear) {
+        const prevRollup = rollupOrdersForBrandSeason(orders, b.id, prevYear.id);
         if (prevRollup) {
           yoyActualJPY = prevRollup.jpy;
         } else {
-          const pa = getEntry(b.id, prevYearSeason.id, "actual");
+          const pa = getEntry(b.id, prevYear.id, "actual");
           yoyActualJPY = computeJPY(pa.local, cur.code === "JPY" ? 1 : pa.rate, cur.code);
         }
       }
       return { brand: b, currency: cur, plan, actual, actualSource, planJPY, actualJPY, yoyActualJPY };
     });
-  }, [masters, activeBrands, currentSeason, prevYearSeason, getEntry, currencyMap, orders]);
+    const planTotal = rowsForSeason.reduce((s, r) => s + r.planJPY, 0);
+    const actualTotal = rowsForSeason.reduce((s, r) => s + r.actualJPY, 0);
+    const yoyTotal = rowsForSeason.reduce((s, r) => s + (r.yoyActualJPY || 0), 0);
+    return {
+      rows: rowsForSeason,
+      planTotal,
+      actualTotal,
+      yoyTotal,
+      vsPlanPct: planTotal ? actualTotal / planTotal - 1 : null,
+      yoyPct: yoyTotal ? actualTotal / yoyTotal : null,
+    };
+  }, [masters, activeBrands, sortedSeasons, getEntry, currencyMap, orders]);
 
-  const seasonPlanTotal = rows.reduce((s, r) => s + r.planJPY, 0);
-  const seasonActualTotal = rows.reduce((s, r) => s + r.actualJPY, 0);
-  const seasonYoyTotal = rows.reduce((s, r) => s + (r.yoyActualJPY || 0), 0);
-  const vsPlanTotalPct = seasonPlanTotal ? seasonActualTotal / seasonPlanTotal - 1 : null;
-  const yoyTotalPct = seasonYoyTotal ? seasonActualTotal / seasonYoyTotal : null;
+  const currentSeasonData = useMemo(() => computeRowsForSeason(currentSeason), [computeRowsForSeason, currentSeason]);
+  const rows = currentSeasonData.rows;
+
+  // Every season's breakdown, newest first, for the horizontally-scrollable
+  // multi-season Purchase Plan table.
+  const allSeasonsData = useMemo(
+    () => [...sortedSeasons].reverse().map((season) => ({ season, data: computeRowsForSeason(season) })),
+    [sortedSeasons, computeRowsForSeason]
+  );
 
   /* ---- dashboard aggregates across all seasons ---- */
   const trend = useMemo(() => {
@@ -1071,29 +1100,29 @@ export default function App() {
   return (
     <div className="bbp-root">
       <Style />
-      <aside className="bbp-side">
+      <aside className={`bbp-side ${tab === "table" ? "bbp-side--floating" : ""}`} tabIndex={tab === "table" ? 0 : undefined}>
         <div className="bbp-brandmark" role="button" tabIndex={0} onClick={() => setTab("home")} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setTab("home"); }}>
           <div className="bbp-brandmark-eyebrow">T.O</div>
           <div className="bbp-brandmark-title">THE BUY</div>
         </div>
         <nav className="bbp-nav">
           <button className={`bbp-navitem ${tab === "table" ? "is-active" : ""}`} onClick={() => setTab("table")}>
-            <span className="bbp-navitem-num">01</span>Purchase Plan
+            <span className="bbp-navitem-num">01</span><span className="bbp-navitem-label">Purchase Plan</span>
           </button>
           <button className={`bbp-navitem ${tab === "orders" ? "is-active" : ""}`} onClick={() => setTab("orders")}>
-            <span className="bbp-navitem-num">02</span>Orders
+            <span className="bbp-navitem-num">02</span><span className="bbp-navitem-label">Orders</span>
           </button>
           <button className={`bbp-navitem ${tab === "launch" ? "is-active" : ""}`} onClick={() => setTab("launch")}>
-            <span className="bbp-navitem-num">03</span>Launch Plan
+            <span className="bbp-navitem-num">03</span><span className="bbp-navitem-label">Launch Plan</span>
           </button>
           <button className={`bbp-navitem ${tab === "payment" ? "is-active" : ""}`} onClick={() => setTab("payment")}>
-            <span className="bbp-navitem-num">04</span>Payment Plan
+            <span className="bbp-navitem-num">04</span><span className="bbp-navitem-label">Payment Plan</span>
           </button>
           <button className={`bbp-navitem ${tab === "dashboard" ? "is-active" : ""}`} onClick={() => setTab("dashboard")}>
-            <span className="bbp-navitem-num">05</span>Dashboard
+            <span className="bbp-navitem-num">05</span><span className="bbp-navitem-label">Dashboard</span>
           </button>
           <button className={`bbp-navitem ${tab === "masters" ? "is-active" : ""}`} onClick={() => setTab("masters")}>
-            <span className="bbp-navitem-num">06</span>Setup
+            <span className="bbp-navitem-num">06</span><span className="bbp-navitem-label">Setup</span>
           </button>
         </nav>
         <div className="bbp-savebox">
@@ -1108,7 +1137,7 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="bbp-main">
+      <main className={`bbp-main ${tab === "table" ? "bbp-main--flush" : ""}`}>
         {tab === "home" && <div className="bbp-home" />}
         {tab === "table" && (
           <TablePane
@@ -1116,16 +1145,12 @@ export default function App() {
             seasonId={seasonId}
             setSeasonId={setSeasonId}
             currentSeason={currentSeason}
-            rows={rows}
             orders={orders}
-            seasonPlanTotal={seasonPlanTotal}
-            seasonActualTotal={seasonActualTotal}
-            seasonYoyTotal={seasonYoyTotal}
-            vsPlanTotalPct={vsPlanTotalPct}
-            yoyTotalPct={yoyTotalPct}
+            allSeasonsData={allSeasonsData}
             showInactive={showInactive}
             setShowInactive={setShowInactive}
             setEntry={setEntry}
+            updateBrand={updateBrand}
           />
         )}
         {tab === "orders" && (
@@ -1205,176 +1230,502 @@ export default function App() {
 /* ------------------------------------------------------------------ */
 
 function TablePane({
-  sortedSeasons, seasonId, setSeasonId, currentSeason, rows, orders,
-  seasonPlanTotal, seasonActualTotal, seasonYoyTotal, vsPlanTotalPct, yoyTotalPct,
-  showInactive, setShowInactive, setEntry,
+  sortedSeasons, seasonId, setSeasonId, currentSeason, orders,
+  allSeasonsData,
+  showInactive, setShowInactive, setEntry, updateBrand,
 }) {
-  const prevYearShort = currentSeason ? String((currentSeason.year - 1) % 100).padStart(2, "0") : "";
-  const yoyLabel = currentSeason
-    ? (
-      <>
-        <span style={{ textTransform: "lowercase" }}>vs</span>
-        {prevYearShort}{currentSeason.type}
-      </>
-    )
-    : "YoY";
-  const prevYearActLabel = currentSeason ? `${prevYearShort}${currentSeason.type} ACT` : "PY ACT";
-  return (
-    <div className="bbp-pane">
-      <header className="bbp-pane-head">
-        <div>
-          <div className="bbp-eyebrow">Season</div>
-          <h1 className="bbp-title">{currentSeason ? currentSeason.label : "—"} Purchase Plan</h1>
-        </div>
-        <div className="bbp-headctrls">
-          <select className="bbp-select" value={seasonId || ""} onChange={(e) => setSeasonId(e.target.value)}>
-            {sortedSeasons.map((s) => (
-              <option key={s.id} value={s.id}>{s.label}</option>
-            ))}
-          </select>
-          <label className="bbp-check">
-            <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
-            Show hidden brands
-          </label>
-        </div>
-      </header>
+  // Sort state now names a season (or null for the season-independent
+  // Brand/Currency columns) alongside the column key, since every season
+  // block is independently sortable.
+  const [sort, setSort] = useState(null); // { seasonId, key, dir }
+  const toggleSort = (sortSeasonId, key) => {
+    setSort((prev) => {
+      if (prev && prev.seasonId === sortSeasonId && prev.key === key) {
+        return { seasonId: sortSeasonId, key, dir: prev.dir === "asc" ? "desc" : "asc" };
+      }
+      return { seasonId: sortSeasonId, key, dir: "asc" };
+    });
+  };
+  const sortArrow = (sortSeasonId, key) =>
+    (sort && sort.seasonId === sortSeasonId && sort.key === key) ? (sort.dir === "asc" ? " ▲" : " ▼") : "";
 
-      <div className="bbp-summary">
-        <SummaryCard label="Total Plan" value={`¥${fmtJPY(seasonPlanTotal)}`} tone="plan" />
-        <SummaryCard label="Total ACT" value={`¥${fmtJPY(seasonActualTotal)}`} tone="actual" />
-        <SummaryCard
-          label="vs Plan"
-          value={fmtPct(vsPlanTotalPct)}
-          tone={vsPlanTotalPct === null ? "neutral" : vsPlanTotalPct >= 0 ? "positive" : "negative"}
-        />
-        <SummaryCard
-          label={yoyLabel}
-          value={fmtPct(yoyTotalPct)}
-          tone={yoyTotalPct === null ? "neutral" : yoyTotalPct >= 1 ? "positive" : "negative"}
-        />
+  const seasonBlocks = useMemo(
+    () => allSeasonsData.map(({ season, data }) => ({
+      season,
+      data,
+      byBrand: new Map(data.rows.map((r) => [r.brand.id, r])),
+    })),
+    [allSeasonsData]
+  );
+
+  // Groups seasonBlocks into year blocks (SS + FW side by side), newest
+  // year first, matching the "By Brand" Excel ledger's layout.
+  const yearBlocks = useMemo(() => {
+    const bySeasonId = new Map(seasonBlocks.map((e) => [e.season.id, e]));
+    const years = new Map();
+    seasonBlocks.forEach(({ season }) => {
+      const year = Number(season.year);
+      if (!years.has(year)) years.set(year, { year, ss: null, fw: null });
+      const g = years.get(year);
+      if (season.type === "SS") g.ss = bySeasonId.get(season.id);
+      else g.fw = bySeasonId.get(season.id);
+    });
+    return Array.from(years.values()).sort((a, b) => b.year - a.year);
+  }, [seasonBlocks]);
+
+  // Per-season, per-currency rate table (Currency / Plan Rate / vs¥ / YoY):
+  // Plan Rate is the average of every brand's plan rate for that currency
+  // this season; vs¥ compares it to the average actual rate that season;
+  // YoY compares it to the same currency's average plan rate the prior-year
+  // same season. JPY is skipped - it has no meaningful "rate".
+  const currencyRateTables = useMemo(() => {
+    const avg = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
+    const planRatesByCurrency = (block) => {
+      const map = new Map();
+      block.data.rows.forEach((r) => {
+        const code = r.currency.code;
+        if (code === "JPY") return;
+        const pr = Number(r.plan.rate);
+        if (pr > 0) {
+          if (!map.has(code)) map.set(code, []);
+          map.get(code).push(pr);
+        }
+      });
+      return map;
+    };
+    const result = new Map();
+    seasonBlocks.forEach((block) => {
+      const { season, data } = block;
+      const byCurrency = new Map();
+      data.rows.forEach((r) => {
+        const code = r.currency.code;
+        if (code === "JPY") return;
+        if (!byCurrency.has(code)) byCurrency.set(code, { planRates: [], actualRates: [] });
+        const bucket = byCurrency.get(code);
+        const pr = Number(r.plan.rate);
+        if (pr > 0) bucket.planRates.push(pr);
+        const ar = Number(r.actual.rate);
+        if (ar > 0) bucket.actualRates.push(ar);
+      });
+      const prevYearBlock = seasonBlocks.find((b) => b.season.type === season.type && b.season.year === season.year - 1);
+      const prevPlanRates = prevYearBlock ? planRatesByCurrency(prevYearBlock) : new Map();
+      const rows = Array.from(byCurrency.entries()).map(([code, { planRates, actualRates }]) => {
+        const planRateAvg = avg(planRates);
+        const actualRateAvg = avg(actualRates);
+        const vsYenPct = planRateAvg && actualRateAvg ? actualRateAvg / planRateAvg - 1 : null;
+        const prevAvg = avg(prevPlanRates.get(code) || []);
+        const yoyPct = planRateAvg && prevAvg ? planRateAvg / prevAvg - 1 : null;
+        return { code, planRateAvg, vsYenPct, yoyPct };
+      }).sort((a, b) => a.code.localeCompare(b.code));
+      result.set(season.id, rows);
+    });
+    return result;
+  }, [seasonBlocks]);
+
+  const decorateRow = (r, total) => {
+    const isJPY = r.currency.code === "JPY";
+    const planShare = total.planTotal ? r.planJPY / total.planTotal : null;
+    const share = total.actualTotal ? r.actualJPY / total.actualTotal : null;
+    const vsPlan = r.planJPY ? r.actualJPY / r.planJPY - 1 : null;
+    const yoy = r.yoyActualJPY ? r.actualJPY / r.yoyActualJPY : null;
+    return { ...r, isJPY, planShare, share, vsPlan, yoy };
+  };
+
+  const brandOrder = useMemo(() => {
+    const baseBrands = allSeasonsData[0]?.data.rows.map((r) => r.brand) || [];
+    if (!sort) return baseBrands;
+    if (sort.seasonId === null) {
+      const sorted = [...baseBrands].sort((a, b) => {
+        const av = sort.key === "currency" ? String(a.currency || "") : String(a.name || "").toLowerCase();
+        const bv = sort.key === "currency" ? String(b.currency || "") : String(b.name || "").toLowerCase();
+        return av.localeCompare(bv);
+      });
+      if (sort.dir === "desc") sorted.reverse();
+      return sorted;
+    }
+    const block = seasonBlocks.find((b) => b.season.id === sort.seasonId);
+    if (!block) return baseBrands;
+    const NEG = Number.NEGATIVE_INFINITY;
+    const getVal = (r) => {
+      switch (sort.key) {
+        case "planLocal": return r.plan.local || 0;
+        case "planRate": return r.isJPY ? NEG : (Number(r.plan.rate) || 0);
+        case "planJPY": return r.planJPY || 0;
+        case "planShare": return r.planShare ?? NEG;
+        case "actLocal": return r.actual.local || 0;
+        case "actRate": return r.isJPY ? NEG : (Number(r.actual.rate) || 0);
+        case "actJPY": return r.actualJPY || 0;
+        case "actShare": return r.share ?? NEG;
+        case "vsPlan": return r.vsPlan ?? NEG;
+        case "yoy": return r.yoy ?? NEG;
+        case "yoyActual": return r.yoyActualJPY || 0;
+        default: return 0;
+      }
+    };
+    const decorated = baseBrands
+      .map((brand) => {
+        const raw = block.byBrand.get(brand.id);
+        return raw ? { brand, row: decorateRow(raw, block.data) } : null;
+      })
+      .filter(Boolean);
+    decorated.sort((a, b) => getVal(a.row) - getVal(b.row));
+    if (sort.dir === "desc") decorated.reverse();
+    return decorated.map((x) => x.brand);
+  }, [allSeasonsData, seasonBlocks, sort]);
+
+  // Scrolls the horizontally-scrolling table so the selected season's block
+  // lands flush against the right edge of the frozen Brand column (the
+  // dropdown is a "jump to" control now, not a filter - every season is
+  // always shown).
+  const tableWrapRef = useRef(null);
+  const brandThRef = useRef(null);
+  const seasonHeaderRefs = useRef({});
+  useEffect(() => {
+    const container = tableWrapRef.current;
+    const target = seasonHeaderRefs.current[seasonId];
+    const brandTh = brandThRef.current;
+    if (!container || !target || !brandTh) return;
+    const containerLeft = container.getBoundingClientRect().left;
+    const frozenWidth = brandTh.getBoundingClientRect().width;
+    const targetLeft = target.getBoundingClientRect().left - containerLeft + container.scrollLeft;
+    container.scrollTo({ left: targetLeft - frozenWidth, behavior: "smooth" });
+  }, [seasonId]);
+
+  // The 4 thead rows (rate table / season title / summary / column labels)
+  // stack via position:sticky, each pinned at the cumulative height of the
+  // rows above it. That "cumulative height" used to be 3-4 hand-typed px
+  // values - correct only for the exact font size/content they were
+  // measured against, and silently wrong (rows overlapping) the moment
+  // either changed. Measuring the rows' actual rendered height instead and
+  // writing it into CSS custom properties keeps the stack correct no matter
+  // what font size, row content, or column count is on screen.
+  const headRowRefs = useRef([null, null, null, null]);
+  useLayoutEffect(() => {
+    const wrap = tableWrapRef.current;
+    const rows = headRowRefs.current;
+    if (!wrap || rows.some((r) => !r)) return;
+    const recalcStickyOffsets = () => {
+      let cumulative = 0;
+      rows.forEach((row, i) => {
+        wrap.style.setProperty(`--pp-head-top-${i + 1}`, `${cumulative}px`);
+        cumulative += row.getBoundingClientRect().height;
+      });
+    };
+    recalcStickyOffsets();
+    const ro = new ResizeObserver(recalcStickyOffsets);
+    rows.forEach((row) => ro.observe(row));
+    return () => ro.disconnect();
+  }, [yearBlocks, currencyRateTables]);
+
+  // Per-season YoY labels - each season block compares itself against its
+  // own prior-year same-season block (e.g. 2027 SS -> 26SS), not a single
+  // globally-selected reference season.
+  const seasonYoyMeta = (season) => {
+    const py = String((season.year - 1) % 100).padStart(2, "0");
+    return { yoyLabel: `vs${py}${season.type}`, prevYearActLabel: `${py}${season.type} ACT` };
+  };
+
+  return (
+    <div className="bbp-pane bbp-pane--flush">
+      <div className="bbp-plantoolbar">
+        <button
+          type="button"
+          className="bbp-plantoolbar-editbtn"
+          onClick={() => setShowInactive((v) => !v)}
+        >
+          {showInactive ? "Done" : "Edit brands"}
+        </button>
+        <select
+          className="bbp-plantoolbar-select"
+          value={seasonId || ""}
+          onChange={(e) => setSeasonId(e.target.value)}
+          title="Jump to season"
+        >
+          {sortedSeasons.map((s) => (
+            <option key={s.id} value={s.id}>{formatSeasonLabel(s)}</option>
+          ))}
+        </select>
       </div>
 
-      <div className="bbp-tablewrap">
-        <table className="bbp-table bbp-table--ledger">
+      <div className="bbp-tablewrap bbp-tablewrap--wide" ref={tableWrapRef}>
+        <table className="bbp-table bbp-table--ledger bbp-table--purchaseplan">
           <thead>
-            <tr>
-              <th className="bbp-th-brand">Brand</th>
-              <th className="bbp-th-currency bbp-th-groupend">Currency</th>
-              <th className="bbp-th-bold">Plan<br />Local Amt</th>
-              <th>Plan<br />Rate</th>
-              <th className="bbp-th-bold">Plan<br />JPY</th>
-              <th>Plan<br />Share</th>
-              <th className="bbp-th-bold">ACT<br />Local Amt</th>
-              <th>ACT<br />Rate</th>
-              <th className="bbp-th-bold">ACT<br />JPY</th>
-              <th>ACT<br />Share</th>
-              <th className="bbp-th-bold">vs Plan</th>
-              <th className="bbp-th-bold">{yoyLabel}</th>
-              <th>{prevYearActLabel}</th>
+            <tr ref={(el) => { headRowRefs.current[0] = el; }}>
+              <th
+                ref={brandThRef}
+                rowSpan={4}
+                className="bbp-th-brand bbp-th-sortable"
+                onClick={() => toggleSort(null, "brand")}
+              >
+                Brand{sortArrow(null, "brand")}
+              </th>
+              <th
+                rowSpan={4}
+                className="bbp-th-currency bbp-th-groupend bbp-th-sortable"
+                onClick={() => toggleSort(null, "currency")}
+              >
+                Currency{sortArrow(null, "currency")}
+              </th>
+              {yearBlocks.map((g, gi) => {
+                const halves = [g.ss, g.fw].filter(Boolean);
+                return (
+                  <React.Fragment key={g.year}>
+                    {gi > 0 && <th className="bbp-yearspacer" aria-hidden="true"></th>}
+                    {halves.map(({ season }) => (
+                      <th key={season.id} colSpan={11} className="bbp-seasonhead-title">
+                        ■ {formatSeasonLabel(season, { upper: true })}
+                      </th>
+                    ))}
+                  </React.Fragment>
+                );
+              })}
+            </tr>
+            <tr ref={(el) => { headRowRefs.current[1] = el; }}>
+              {yearBlocks.map((g, gi) => {
+                const halves = [g.ss, g.fw].filter(Boolean);
+                return (
+                  <React.Fragment key={g.year}>
+                    {gi > 0 && <th className="bbp-yearspacer" aria-hidden="true"></th>}
+                    {halves.map(({ season }) => {
+                      const rates = currencyRateTables.get(season.id) || [];
+                      return (
+                        <th key={season.id} colSpan={11} className="bbp-ratetable-cell">
+                          <div className="bbp-ratetable">
+                            <div className="bbp-ratetable-row bbp-ratetable-head">
+                              <span>Currency</span><span>Plan Rate</span><span>vs ¥</span><span>YoY</span>
+                            </div>
+                            {rates.map((r) => (
+                              <div className="bbp-ratetable-row" key={r.code}>
+                                <span>{r.code}</span>
+                                <span>{r.planRateAvg !== null ? r.planRateAvg.toFixed(1) : "—"}</span>
+                                <span>{r.vsYenPct !== null ? fmtPct(r.vsYenPct) : "—"}</span>
+                                <span>{r.yoyPct !== null ? fmtPct(r.yoyPct) : "—"}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </th>
+                      );
+                    })}
+                  </React.Fragment>
+                );
+              })}
+            </tr>
+            <tr ref={(el) => { headRowRefs.current[2] = el; }}>
+              {yearBlocks.map((g, gi) => {
+                const annualPlan = (g.ss?.data.planTotal || 0) + (g.fw?.data.planTotal || 0);
+                const annualActual = (g.ss?.data.actualTotal || 0) + (g.fw?.data.actualTotal || 0);
+                const annualGap = annualActual - annualPlan;
+                const cell = (label, value) => (
+                  <div className="bbp-seasonhead-cell" key={label}><span>{label}</span><strong>{value}</strong></div>
+                );
+                const annualCells = [
+                  cell("Annual Plan", `¥${fmtJPY(annualPlan)}`),
+                  cell("Annual Act", `¥${fmtJPY(annualActual)}`),
+                  cell("Annual Gap", `¥${fmtJPY(annualGap)}`),
+                ];
+                return (
+                  <React.Fragment key={g.year}>
+                    {gi > 0 && <th className="bbp-yearspacer" aria-hidden="true"></th>}
+                    {g.ss && (
+                      <th colSpan={11} className="bbp-seasonhead-summarycell">
+                        <div className="bbp-seasonhead-grid">
+                          {annualCells}
+                          {cell("SS Plan", `¥${fmtJPY(g.ss.data.planTotal)}`)}
+                          {cell("SS Act", `¥${fmtJPY(g.ss.data.actualTotal)}`)}
+                          {cell("vs Plan", fmtPct(g.ss.data.vsPlanPct))}
+                        </div>
+                      </th>
+                    )}
+                    {g.fw && (
+                      <th colSpan={11} className="bbp-seasonhead-summarycell">
+                        <div className="bbp-seasonhead-grid">
+                          {!g.ss && annualCells}
+                          {cell("FW Plan", `¥${fmtJPY(g.fw.data.planTotal)}`)}
+                          {cell("FW Act", `¥${fmtJPY(g.fw.data.actualTotal)}`)}
+                          {cell("vs Plan", fmtPct(g.fw.data.vsPlanPct))}
+                        </div>
+                      </th>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tr>
+            <tr ref={(el) => { headRowRefs.current[3] = el; }}>
+              {yearBlocks.map((g, gi) => {
+                const halves = [g.ss, g.fw].filter(Boolean);
+                return (
+                  <React.Fragment key={g.year}>
+                    {gi > 0 && <th className="bbp-yearspacer" aria-hidden="true"></th>}
+                    {halves.map(({ season }) => {
+                      const meta = seasonYoyMeta(season);
+                      const s = (key, label, extraClass = "", refFn) => (
+                        <th
+                          key={key}
+                          ref={refFn}
+                          className={`bbp-th-sortable ${extraClass}`.trim()}
+                          onClick={() => toggleSort(season.id, key)}
+                        >
+                          {label}{sortArrow(season.id, key)}
+                        </th>
+                      );
+                      return (
+                        <React.Fragment key={season.id}>
+                          {s("planLocal", <>Plan<br />Local Amt</>, "", (el) => { seasonHeaderRefs.current[season.id] = el; })}
+                          {s("planRate", <>Plan<br />Rate</>)}
+                          {s("planJPY", <>Plan<br />JPY</>)}
+                          {s("planShare", <>Plan<br />Share</>, "bbp-th-groupend")}
+                          {s("actLocal", <>ACT<br />Local Amt</>)}
+                          {s("actRate", <>ACT<br />Rate</>)}
+                          {s("actJPY", <>ACT<br />JPY</>)}
+                          {s("actShare", <>ACT<br />Share</>, "bbp-th-groupend")}
+                          {s("vsPlan", "vs Plan")}
+                          {s("yoy", meta.yoyLabel)}
+                          {s("yoyActual", meta.prevYearActLabel)}
+                        </React.Fragment>
+                      );
+                    })}
+                  </React.Fragment>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => {
-              const isJPY = r.currency.code === "JPY";
-              const planShare = seasonPlanTotal ? r.planJPY / seasonPlanTotal : null;
-              const share = seasonActualTotal ? r.actualJPY / seasonActualTotal : null;
-              const vsPlan = r.planJPY ? r.actualJPY / r.planJPY - 1 : null;
-              const yoy = r.yoyActualJPY ? r.actualJPY / r.yoyActualJPY : null;
-              return (
-                <tr key={r.brand.id} className={r.brand.active ? "" : "bbp-row--inactive"}>
-                  <td className="bbp-td-brand">{r.brand.name}</td>
-                  <td className="bbp-td-currency bbp-td-groupend">{r.currency.code}</td>
-
-                  <td className="bbp-td-bold">
-                    <EditableNumber
-                      value={r.plan.local}
-                      round={0}
-                      thousands
-                      width={86}
-                      onCommit={(v) => setEntry(r.brand.id, currentSeason.id, "plan", "local", v)}
+            {brandOrder.map((brand) => (
+              <tr key={brand.id} className={brand.active ? "" : "bbp-row--inactive"}>
+                <td className="bbp-td-brand">
+                  {/* Always rendered (just hidden via CSS outside edit mode)
+                      so the column's width doesn't jump when toggling. */}
+                  <label
+                    className={`bbp-brandvis ${showInactive ? "" : "bbp-brandvis--hidden"}`}
+                    title={brand.active ? "Hide brand" : "Show brand"}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={brand.active}
+                      tabIndex={showInactive ? 0 : -1}
+                      onChange={(e) => updateBrand(brand.id, { active: e.target.checked })}
                     />
-                  </td>
-                  <td className="bbp-td-rate">
-                    {isJPY ? <span className="bbp-fixed">—</span> : (
-                      <EditableNumber
-                        value={r.plan.rate}
-                        width={56}
-                        align="right"
-                        onCommit={(v) => setEntry(r.brand.id, currentSeason.id, "plan", "rate", v)}
-                      />
-                    )}
-                  </td>
-                  <td className="bbp-td-jpy bbp-td-jpy--plan bbp-td-bold">¥{fmtJPY(r.planJPY)}</td>
-                  <td className="bbp-td-num bbp-td-groupend">{fmtPct(planShare)}</td>
+                  </label>
+                  {brand.name}
+                </td>
+                <td className="bbp-td-currency bbp-td-groupend">
+                  {(seasonBlocks[0]?.byBrand.get(brand.id) || {}).currency?.code || brand.currency}
+                </td>
 
-                  <td className="bbp-td-bold">
-                    {r.actualSource === "orders" ? (
-                      <span
-                        className="bbp-fromorders bbp-fromorders-boxed"
-                        title={`Rolled up from ${orders.filter((o) => o.brandId === r.brand.id && o.seasonId === currentSeason.id).length} order(s)`}
-                      >
-                        {fmtJPY(r.actual.local)}
-                      </span>
-                    ) : (
-                      <EditableNumber
-                        value={r.actual.local}
-                        round={0}
-                        thousands
-                        width={86}
-                        onCommit={(v) => setEntry(r.brand.id, currentSeason.id, "actual", "local", v)}
-                      />
-                    )}
-                  </td>
-                  <td className="bbp-td-rate">
-                    {r.actualSource === "orders" ? (
-                      <span className="bbp-fromorders">{r.actual.rate ? r.actual.rate.toFixed(2) : "—"}</span>
-                    ) : isJPY ? <span className="bbp-fixed">—</span> : (
-                      <EditableNumber
-                        value={r.actual.rate}
-                        width={56}
-                        align="right"
-                        onCommit={(v) => setEntry(r.brand.id, currentSeason.id, "actual", "rate", v)}
-                      />
-                    )}
-                  </td>
-                  <td className="bbp-td-jpy bbp-td-jpy--actual bbp-td-bold">¥{fmtJPY(r.actualJPY)}</td>
+                {yearBlocks.map((g, gi) => {
+                  const halves = [g.ss, g.fw].filter(Boolean);
+                  return (
+                    <React.Fragment key={g.year}>
+                      {gi > 0 && <td className="bbp-yearspacer" aria-hidden="true"></td>}
+                      {halves.map(({ season, data, byBrand }) => {
+                        const raw = byBrand.get(brand.id);
+                        if (!raw) return <React.Fragment key={season.id} />;
+                        const { isJPY, planShare, share, vsPlan, yoy, ...r } = decorateRow(raw, data);
+                        return (
+                          <React.Fragment key={season.id}>
+                            <td className="bbp-td-right">
+                              <EditableNumber
+                                value={r.plan.local}
+                                round={0}
+                                thousands
+                                width={86}
+                                onCommit={(v) => setEntry(brand.id, season.id, "plan", "local", v)}
+                              />
+                            </td>
+                            <td className="bbp-td-rate">
+                              {isJPY ? <span className="bbp-fixed">—</span> : (
+                                <EditableNumber
+                                  value={r.plan.rate}
+                                  width={56}
+                                  align="right"
+                                  onCommit={(v) => setEntry(brand.id, season.id, "plan", "rate", v)}
+                                />
+                              )}
+                            </td>
+                            <td className="bbp-td-jpy bbp-td-jpy--plan">¥{fmtJPY(r.planJPY)}</td>
+                            <td className="bbp-td-num bbp-td-groupend">{fmtPct(planShare)}</td>
 
-                  <td className="bbp-td-num bbp-td-groupend">{fmtPct(share)}</td>
-                  <td className="bbp-td-num bbp-td-bold">
-                    {vsPlan === null ? "—" : <Pill tone={vsPlan >= 0 ? "positive" : "negative"}>{fmtPct(vsPlan)}</Pill>}
-                  </td>
-                  <td className="bbp-td-num bbp-td-bold">
-                    {yoy === null ? "—" : <Pill tone={yoy >= 1 ? "positive" : "negative"}>{fmtPct(yoy)}</Pill>}
-                  </td>
-                  <td className="bbp-td-jpy">{r.yoyActualJPY ? `¥${fmtJPY(r.yoyActualJPY)}` : "—"}</td>
-                </tr>
-              );
-            })}
+                            <td className="bbp-td-right">
+                              {r.actualSource === "orders" ? (
+                                <span
+                                  className="bbp-fromorders bbp-fromorders-boxed"
+                                  title={`Rolled up from ${orders.filter((o) => o.brandId === brand.id && o.seasonId === season.id).length} order(s)`}
+                                >
+                                  {fmtJPY(r.actual.local)}
+                                </span>
+                              ) : (
+                                <EditableNumber
+                                  value={r.actual.local}
+                                  round={0}
+                                  thousands
+                                  width={86}
+                                  onCommit={(v) => setEntry(brand.id, season.id, "actual", "local", v)}
+                                />
+                              )}
+                            </td>
+                            <td className="bbp-td-rate">
+                              {r.actualSource === "orders" ? (
+                                <span className="bbp-fromorders">{r.actual.rate ? r.actual.rate.toFixed(2) : "—"}</span>
+                              ) : isJPY ? <span className="bbp-fixed">—</span> : (
+                                <EditableNumber
+                                  value={r.actual.rate}
+                                  width={56}
+                                  align="right"
+                                  onCommit={(v) => setEntry(brand.id, season.id, "actual", "rate", v)}
+                                />
+                              )}
+                            </td>
+                            <td className="bbp-td-jpy bbp-td-jpy--actual">¥{fmtJPY(r.actualJPY)}</td>
+
+                            <td className="bbp-td-num bbp-td-groupend">{fmtPct(share)}</td>
+                            <td className="bbp-td-num">
+                              {vsPlan === null ? "—" : <Pill tone={vsPlan >= 0 ? "positive" : "negative"}>{fmtPct(vsPlan)}</Pill>}
+                            </td>
+                            <td className="bbp-td-num">
+                              {yoy === null ? "—" : <Pill tone={yoy >= 1 ? "positive" : "negative"}>{fmtPct(yoy)}</Pill>}
+                            </td>
+                            <td className="bbp-td-jpy">{r.yoyActualJPY ? `¥${fmtJPY(r.yoyActualJPY)}` : "—"}</td>
+                          </React.Fragment>
+                        );
+                      })}
+                    </React.Fragment>
+                  );
+                })}
+              </tr>
+            ))}
           </tbody>
           <tfoot>
             <tr>
-              <td colSpan={4} className="bbp-td-totallabel">Total</td>
-              <td className="bbp-td-jpy bbp-td-jpy--plan bbp-td-bold">¥{fmtJPY(seasonPlanTotal)}</td>
-              <td className="bbp-td-groupend">100%</td>
-              <td colSpan={2}></td>
-              <td className="bbp-td-jpy bbp-td-jpy--actual bbp-td-bold">¥{fmtJPY(seasonActualTotal)}</td>
-              <td className="bbp-td-groupend">100%</td>
-              <td className="bbp-td-bold">{fmtPct(vsPlanTotalPct)}</td>
-              <td className="bbp-td-bold">{fmtPct(yoyTotalPct)}</td>
-              <td className="bbp-td-jpy">¥{fmtJPY(seasonYoyTotal)}</td>
+              <td colSpan={2} className="bbp-td-totallabel">Total</td>
+              {yearBlocks.map((g, gi) => {
+                const halves = [g.ss, g.fw].filter(Boolean);
+                return (
+                  <React.Fragment key={g.year}>
+                    {gi > 0 && <td className="bbp-yearspacer" aria-hidden="true"></td>}
+                    {halves.map(({ season, data }) => {
+                      return (
+                        <React.Fragment key={season.id}>
+                          <td></td>
+                          <td></td>
+                          <td className="bbp-td-jpy bbp-td-jpy--plan">¥{fmtJPY(data.planTotal)}</td>
+                          <td className="bbp-td-groupend">100%</td>
+                          <td></td>
+                          <td></td>
+                          <td className="bbp-td-jpy bbp-td-jpy--actual">¥{fmtJPY(data.actualTotal)}</td>
+                          <td className="bbp-td-groupend">100%</td>
+                          <td>{fmtPct(data.vsPlanPct)}</td>
+                          <td>{fmtPct(data.yoyPct)}</td>
+                          <td className="bbp-td-jpy">¥{fmtJPY(data.yoyTotal)}</td>
+                        </React.Fragment>
+                      );
+                    })}
+                  </React.Fragment>
+                );
+              })}
             </tr>
           </tfoot>
         </table>
       </div>
-    </div>
-  );
-}
-
-function SummaryCard({ label, value, tone }) {
-  return (
-    <div className={`bbp-card bbp-card--${tone}`}>
-      <div className="bbp-card-label">{label}</div>
-      <div className="bbp-card-value">{value}</div>
     </div>
   );
 }
@@ -3214,6 +3565,7 @@ function Style() {
         border: 1px solid var(--line);
         letter-spacing: 0.01em;
       }
+      .bbp-root input[type="checkbox"] { accent-color: var(--ink); }
       .bbp-loading, .bbp-error { padding: 40px; font-family: var(--font-sans); color: var(--ink-soft); }
 
       .bbp-splash {
@@ -3265,9 +3617,40 @@ function Style() {
         padding: 12px 0 12px 14px; border-radius: 0; cursor: pointer;
         transition: color 0.15s, border-color 0.15s;
       }
-      .bbp-navitem-num { font-size: 10px; color: var(--ink-soft); letter-spacing: 0.05em; }
+      .bbp-navitem-num { font-size: 10px; color: var(--ink-soft); letter-spacing: 0.05em; flex-shrink: 0; }
       .bbp-navitem:hover { color: var(--ink); }
       .bbp-navitem.is-active { color: var(--ink); border-left-color: var(--ink); }
+
+      /* Purchase Plan only: the sidebar auto-hides to a thin edge strip so the
+         table gets the full width; hovering (or focusing) it near the left
+         edge slides the full sidebar out over the content, and it retreats
+         again the moment the pointer leaves. */
+      .bbp-side--floating {
+        position: fixed; top: 0; left: 0; bottom: 0; z-index: 100;
+        width: 16px; padding: 36px 0 36px 0; overflow: hidden; white-space: nowrap;
+        box-shadow: none;
+        transition: width 0.15s ease, padding 0.15s ease, box-shadow 0.15s ease;
+      }
+      .bbp-side--floating::before {
+        content: "›"; position: absolute; top: 50%; left: 0; width: 16px; text-align: center;
+        transform: translateY(-50%); font-size: 13px; color: var(--ink-soft);
+      }
+      .bbp-side--floating:hover, .bbp-side--floating:focus-within {
+        width: 232px; padding: 36px 28px; box-shadow: 6px 0 28px rgba(17, 17, 16, 0.18);
+      }
+      .bbp-side--floating:hover::before, .bbp-side--floating:focus-within::before { content: none; }
+      .bbp-side--floating .bbp-brandmark,
+      .bbp-side--floating .bbp-nav,
+      .bbp-side--floating .bbp-savebox,
+      .bbp-side--floating .bbp-backupbox {
+        opacity: 0; transition: opacity 0.1s ease;
+      }
+      .bbp-side--floating:hover .bbp-brandmark, .bbp-side--floating:focus-within .bbp-brandmark,
+      .bbp-side--floating:hover .bbp-nav, .bbp-side--floating:focus-within .bbp-nav,
+      .bbp-side--floating:hover .bbp-savebox, .bbp-side--floating:focus-within .bbp-savebox,
+      .bbp-side--floating:hover .bbp-backupbox, .bbp-side--floating:focus-within .bbp-backupbox {
+        opacity: 1;
+      }
 
       .bbp-savebox {
         display: flex; align-items: center; gap: 8px;
@@ -3290,7 +3673,9 @@ function Style() {
       .bbp-importinfo { margin-top: 14px; font-size: 12px; color: var(--ink-soft); }
 
       .bbp-main { flex: 1; overflow-y: auto; padding: 44px 56px; background: var(--bg); }
+      .bbp-main--flush { padding-top: 10px; }
       .bbp-pane { max-width: 1760px; width: 100%; }
+      .bbp-pane--flush { max-width: none; }
       .bbp-pane-head { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 32px; flex-wrap: wrap; gap: 12px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
       .bbp-eyebrow { font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 8px; font-weight: 400; }
       .bbp-title { font-family: var(--font-serif); font-size: 26px; font-weight: 400; margin: 0; letter-spacing: 0.01em; }
@@ -3302,14 +3687,78 @@ function Style() {
       }
       .bbp-check { display: flex; align-items: center; gap: 6px; font-size: 11px; letter-spacing: 0.04em; color: var(--ink-soft); }
 
-      .bbp-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin-bottom: 40px; border: 1px solid var(--line); }
-      .bbp-card { background: var(--surface); border: none; border-left: 1px solid var(--line); padding: 20px 22px; }
-      .bbp-card:first-child { border-left: none; }
-      .bbp-card--plan, .bbp-card--actual, .bbp-card--positive, .bbp-card--negative { border-left: 1px solid var(--line); }
-      .bbp-card-label { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 10px; }
-      .bbp-card-value { font-family: var(--font-mono); font-size: 21px; font-weight: 300; letter-spacing: 0.01em; }
+      /* Small top-right toolbar (Edit brands + season jump select) that
+         replaces the old page-header block above the table. */
+      .bbp-plantoolbar { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-bottom: 6px; }
+      .bbp-plantoolbar-editbtn {
+        font-family: var(--font-sans); font-size: 9px; letter-spacing: 0.05em; text-transform: uppercase;
+        padding: 4px 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer;
+      }
+      .bbp-plantoolbar-editbtn:hover { border-color: var(--ink); }
+      .bbp-plantoolbar-select {
+        font-family: var(--font-sans); font-size: 9px; letter-spacing: 0.04em; text-transform: uppercase;
+        padding: 4px 6px; border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+      }
 
-      .bbp-tablewrap { background: var(--surface); border: 1px solid var(--line); border-radius: 0; overflow: auto; max-height: 640px; }
+      .bbp-tablewrap {
+        background: var(--surface); border: 1px solid var(--line); border-top: none; border-radius: 0;
+        overflow: auto; max-height: 640px;
+      }
+      .bbp-tablewrap--wide { max-height: 760px; }
+      /* Purchase Plan's header is four rows (currency rate table, season
+         title, Annual/SS/FW summary, column labels) - give each its own
+         sticky offset so all four stay pinned while scrolling vertically,
+         instead of overlapping at top:0. The offsets themselves are NOT
+         hand-typed px: a ResizeObserver (see the headRowRefs effect in
+         TablePane) measures each row's real rendered height and writes it
+         into these --pp-head-top-N custom properties, so the stack stays
+         correct no matter what font size or content changes the rows'
+         actual height. The static px fallbacks only cover the one frame
+         before that effect's first measurement runs. */
+      .bbp-table--purchaseplan thead tr:nth-child(1) th { top: var(--pp-head-top-1, 0px); z-index: 6; }
+      .bbp-table--purchaseplan thead tr:nth-child(2) th { top: var(--pp-head-top-2, 23px); z-index: 5; }
+      .bbp-table--purchaseplan thead tr:nth-child(3) th { top: var(--pp-head-top-3, 46px); z-index: 4; }
+      .bbp-table--purchaseplan thead tr:nth-child(4) th { top: var(--pp-head-top-4, 88px); z-index: 3; }
+      .bbp-table--purchaseplan th.bbp-seasonhead-title {
+        text-align: left; font-family: var(--font-serif); white-space: normal;
+      }
+      .bbp-seasonhead-summarycell { text-align: left; vertical-align: top; white-space: normal; padding: 3px 6px; }
+      /* Evenly spaced 3-across grid (2 rows for the SS side: Annual then
+         SS-specific; 1 row for FW) filling the full block width, instead of
+         a single stretched-out column of rows. */
+      .bbp-seasonhead-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px 16px; }
+      .bbp-seasonhead-cell { display: flex; justify-content: flex-start; align-items: baseline; gap: 4px; font-family: var(--font-mono); white-space: nowrap; }
+      .bbp-seasonhead-cell span { text-align: left; letter-spacing: 0.02em; }
+      .bbp-seasonhead-cell strong { text-align: left; font-weight: inherit; }
+      /* Per-currency Plan Rate / vs¥ / YoY mini-table, one per season,
+         above the season title. Same uniform font as the rest of the
+         table - only the season title itself is allowed to differ. */
+      .bbp-ratetable-cell { text-align: left; vertical-align: top; white-space: normal; padding: 3px 6px; }
+      .bbp-ratetable { display: flex; flex-direction: column; gap: 1px; }
+      /* minmax(0, 1fr), not plain 1fr: a bare 1fr track is really
+         minmax(auto, 1fr), which refuses to shrink a column below its
+         content's natural width (e.g. a lone "2.9%" with no break point) -
+         so once four of those hit a season block that's scrolled flush
+         against the frozen Brand column, the grid pushed itself wider than
+         its own <th> and the overflow bled into the frozen column's area.
+         minmax(0, 1fr) lets each column actually shrink to fit. */
+      .bbp-ratetable-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; font-family: var(--font-mono); }
+      .bbp-ratetable-row span { text-align: right; letter-spacing: 0.02em; }
+      .bbp-ratetable-row span:first-child { text-align: left; }
+      .bbp-ratetable-head span { font-family: var(--font-sans); letter-spacing: 0.04em; text-transform: uppercase; font-weight: 700; }
+      /* Year blocks are separated by an actual empty column (one per year
+         boundary, not one per season - so never between SS and FW of the
+         same year) rather than a painted-on band. A real column can't be
+         covered by a neighbor's content, doesn't need any padding
+         workaround, and is trivially "always white, top to bottom" since
+         it's just... an empty white cell in every row, header through
+         footer. !important beats the ledger's black thead/Brand/Currency
+         background rules, which otherwise outrank a single-class selector. */
+      .bbp-yearspacer {
+        width: 16px; min-width: 16px; max-width: 16px;
+        padding: 0 !important; border: none !important; background: var(--surface) !important;
+      }
+      .bbp-td-right { text-align: right; }
       .bbp-table { border-collapse: collapse; width: auto; font-size: 12px; }
       .bbp-table th, .bbp-table td {
         padding: 6px 5px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); white-space: nowrap;
@@ -3320,10 +3769,10 @@ function Style() {
         color: var(--ink-soft); text-align: center; background: var(--bg); line-height: 1.5;
         position: sticky; top: 0; z-index: 3; box-sizing: border-box;
       }
-      .bbp-th-brand { text-align: center !important; position: sticky; left: 0; top: 0; background: var(--bg); z-index: 4; }
+      .bbp-th-brand { text-align: left !important; position: sticky; left: 0; top: 0; background: var(--bg); z-index: 4; }
       .bbp-table thead th.bbp-th-bold { font-weight: 700; color: var(--ink); }
 
-      .bbp-td-brand { text-align: center; font-weight: 400; position: sticky; left: 0; background: var(--surface); z-index: 1; vertical-align: middle; }
+      .bbp-td-brand { text-align: left; font-weight: 400; position: sticky; left: 0; background: var(--surface); z-index: 1; vertical-align: middle; }
       .bbp-row--inactive .bbp-td-brand { color: var(--ink-soft); font-style: normal; }
       .bbp-td-currency { text-align: center; color: var(--ink-soft); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.05em; }
       .bbp-td-rate { text-align: right; }
@@ -3362,6 +3811,72 @@ function Style() {
       .bbp-table.bbp-table--ledger .bbp-td-brand .bbp-eventname:focus { border-color: var(--bg); }
       .bbp-table.bbp-table--ledger .bbp-td-brand .bbp-eventtag { color: var(--bg); border-color: var(--bg); }
       .bbp-table.bbp-table--ledger .bbp-td-brand .bbp-chipclose { color: var(--bg); }
+
+      .bbp-th-sortable { cursor: pointer; user-select: none; }
+      .bbp-th-sortable:hover { color: var(--accent); }
+      .bbp-table.bbp-table--ledger thead th.bbp-th-sortable:hover { color: var(--bg); text-decoration: underline; }
+      .bbp-brandvis { display: inline-flex; align-items: center; margin-right: 6px; vertical-align: middle; }
+      .bbp-brandvis--hidden { visibility: hidden; }
+
+      /* Purchase Plan table only: one uniform font size/weight everywhere
+         (summary, headers, data, brand names, pills) - matched to the vs
+         Plan / YoY percentage pills' own size (11px), the one size already
+         in use nobody had overridden elsewhere. The season title
+         (■ 2027 SPRING/SUMMER) is the sole exception, 4pt larger and bold.
+         Matching the shared .bbp-table--ledger's higher specificity (2
+         classes) so this reliably wins over the single-class rules
+         (.bbp-td-jpy, .bbp-th-bold, etc.) set elsewhere for the other tables.
+         The thead sticky offsets don't need updating for this: they're
+         measured live off the actual rendered row heights (see the
+         headRowRefs/ResizeObserver effect), not hand-typed px. */
+      .bbp-table--purchaseplan,
+      .bbp-table--purchaseplan th,
+      .bbp-table--purchaseplan td,
+      .bbp-table--purchaseplan .bbp-input,
+      .bbp-table--purchaseplan .bbp-pill { font-size: 11px !important; font-weight: 400 !important; }
+      .bbp-table--purchaseplan th.bbp-seasonhead-title { font-size: 15px !important; font-weight: 700 !important; }
+      /* Horizontal padding trimmed (vertical untouched, so row/cell height
+         doesn't move) to reclaim the width the bigger font needs, so wide
+         JPY totals keep fitting on one line without wrapping/overflowing -
+         the table is table-layout:auto with nowrap cells, so a column only
+         ever grows to fit its content, it never wraps or clips. */
+      .bbp-table--purchaseplan th, .bbp-table--purchaseplan td { padding: 4px 2px; }
+      /* Data rows (brand rows) get even tighter vertical padding than the
+         header, per the ledger's denser row rhythm. */
+      .bbp-table--purchaseplan tbody td { padding-top: 2px; padding-bottom: 2px; }
+
+      /* Purchase Plan only: the table's shared --line/--ink tokens are a
+         soft near-black (#111110), which reads as "grayish" against the
+         data rows' true-white background. Cells with a black (--ink) fill
+         (thead, Brand/Currency) already use --bg for their border color and
+         are left untouched here; only the white-background cells get
+         pushed to true #000000. Width/style untouched - only the color
+         changes, so this doesn't affect row height. */
+      .bbp-table--purchaseplan tbody td:not(.bbp-td-brand):not(.bbp-td-currency),
+      .bbp-table--purchaseplan tfoot td { border-color: #000000 !important; }
+      /* Belt-and-suspenders: the rule above already covers these (plain
+         "td"), but the group-end divider (Plan Share | ACT Share -> vs
+         Plan) is set by its own dedicated 2px rule elsewhere - restating it
+         here by name guarantees the color wins with zero ambiguity. */
+      .bbp-table--purchaseplan.bbp-table--ledger tbody td.bbp-td-groupend,
+      .bbp-table--purchaseplan.bbp-table--ledger tfoot td.bbp-td-groupend { border-right-color: #000000 !important; }
+
+      /* Row highlight on Brand-name hover: 2px lines above/below the row,
+         via inset box-shadow (not border) so row height never moves.
+         Applied per-cell via :has() rather than a single row-level border,
+         so it paints identically on the sticky Brand column too and reads
+         as one continuous line across the whole row regardless of scroll
+         position - and background-color is untouched, only the lines. Black
+         everywhere except the Brand/Currency cells, which keep a black fill
+         (ledger styling) - a black line there would vanish against it, so
+         those two get the white/--bg line instead, same as the year band. */
+      .bbp-table--purchaseplan tbody tr:has(.bbp-td-brand:hover) td {
+        box-shadow: inset 0 2px 0 0 #000000, inset 0 -2px 0 0 #000000;
+      }
+      .bbp-table--purchaseplan tbody tr:has(.bbp-td-brand:hover) td.bbp-td-brand,
+      .bbp-table--purchaseplan tbody tr:has(.bbp-td-brand:hover) td.bbp-td-currency {
+        box-shadow: inset 0 2px 0 0 var(--bg), inset 0 -2px 0 0 var(--bg) !important;
+      }
 
       .bbp-input {
         border: 1px solid transparent; background: transparent; padding: 3px 4px; border-radius: 0;
@@ -3664,10 +4179,13 @@ function Style() {
 
       @media (max-width: 720px) {
         .bbp-root { flex-direction: column; min-height: 0; }
-        .bbp-side {
-          width: auto; flex-direction: row; align-items: center; padding: 14px 16px;
-          border-right: none; border-bottom: 1px solid var(--line); gap: 16px; overflow-x: auto;
+        .bbp-side, .bbp-side--floating {
+          position: static; width: auto; flex-direction: row; align-items: center; padding: 14px 16px;
+          border-right: none; border-bottom: 1px solid var(--line); gap: 16px; overflow-x: auto; box-shadow: none;
         }
+        .bbp-side--floating::before { content: none; }
+        .bbp-side--floating .bbp-brandmark, .bbp-side--floating .bbp-nav,
+        .bbp-side--floating .bbp-savebox, .bbp-side--floating .bbp-backupbox { opacity: 1; }
         .bbp-brandmark { margin-bottom: 0; flex-shrink: 0; }
         .bbp-brandmark-eyebrow { display: none; }
         .bbp-brandmark-title { font-size: 15px; }
@@ -3682,7 +4200,6 @@ function Style() {
         .bbp-title { font-size: 20px; }
         .bbp-pane-head { flex-direction: column; align-items: flex-start; }
         .bbp-headctrls { flex-wrap: wrap; width: 100%; gap: 10px; }
-        .bbp-summary { grid-template-columns: 1fr 1fr; }
 
         .bbp-ordergrid--2, .bbp-ordergrid--3, .bbp-ordergrid--4 { grid-template-columns: 1fr; }
         .bbp-field--span2 { grid-column: span 1; }

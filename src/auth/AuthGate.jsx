@@ -1,5 +1,6 @@
-import React, { useState } from "react";
-import { login } from "../lib/storage.js";
+import React, { useState, useEffect } from "react";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth, login } from "../lib/storage.js";
 import { primeAudio, scheduleUnlockClick } from "../lib/audio.js";
 import { SPLASH_CLICK_MS } from "../lib/splashTiming.js";
 
@@ -59,11 +60,30 @@ function messageFor(err) {
 }
 
 export default function AuthGate({ children }) {
+  // Firebase's own auth session restore is async - on iOS Safari, a
+  // backgrounded tab reclaimed for memory (e.g. switching to Camera/Photos)
+  // comes back as a full reload, and without this we'd render the password
+  // form immediately, before Firebase has had a chance to report whether a
+  // session already exists, showing it for a beat every single time.
+  // authChecking blocks that first paint until onAuthStateChanged fires once.
+  //
+  // Note this only restores the *Firebase Auth* session - it can't skip the
+  // password prompt itself. This app derives its data-encryption key from
+  // the plaintext password (PBKDF2) and deliberately keeps that key
+  // in-memory only, never persisted anywhere (see lib/storage.js) - so a
+  // reload that wipes JS state always needs the password re-typed to
+  // re-derive it, regardless of the Firebase session being restored.
+  const [authChecking, setAuthChecking] = useState(true);
   const [unlocked, setUnlocked] = useState(false);
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [firstTime, setFirstTime] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, () => setAuthChecking(false));
+    return unsubscribe;
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -86,6 +106,14 @@ export default function AuthGate({ children }) {
   };
 
   if (unlocked) return children;
+
+  if (authChecking) {
+    return (
+      <div style={STYLES.page}>
+        <div style={{ ...STYLES.title, opacity: 0.5 }}>THE BUY</div>
+      </div>
+    );
+  }
 
   return (
     <div style={STYLES.page}>
