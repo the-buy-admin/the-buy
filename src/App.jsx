@@ -1470,7 +1470,12 @@ function TablePane({
                 const halves = [g.ss, g.fw].filter(Boolean);
                 return (
                   <React.Fragment key={g.year}>
-                    {gi > 0 && <th className="bbp-yearspacer" aria-hidden="true"></th>}
+                    {gi > 0 && (
+                      <>
+                        <th className="bbp-yearspacer" aria-hidden="true"></th>
+                        <th className="bbp-yearstart-spacer" aria-hidden="true"></th>
+                      </>
+                    )}
                     {halves.map(({ season }) => (
                       <th key={season.id} colSpan={11} className="bbp-seasonhead-title">
                         ■ {formatSeasonLabel(season, { upper: true })}
@@ -1485,7 +1490,12 @@ function TablePane({
                 const halves = [g.ss, g.fw].filter(Boolean);
                 return (
                   <React.Fragment key={g.year}>
-                    {gi > 0 && <th className="bbp-yearspacer" aria-hidden="true"></th>}
+                    {gi > 0 && (
+                      <>
+                        <th className="bbp-yearspacer" aria-hidden="true"></th>
+                        <th className="bbp-yearstart-spacer" aria-hidden="true"></th>
+                      </>
+                    )}
                     {halves.map(({ season }) => {
                       const rates = currencyRateTables.get(season.id) || [];
                       return (
@@ -1525,7 +1535,12 @@ function TablePane({
                 ];
                 return (
                   <React.Fragment key={g.year}>
-                    {gi > 0 && <th className="bbp-yearspacer" aria-hidden="true"></th>}
+                    {gi > 0 && (
+                      <>
+                        <th className="bbp-yearspacer" aria-hidden="true"></th>
+                        <th className="bbp-yearstart-spacer" aria-hidden="true"></th>
+                      </>
+                    )}
                     {g.ss && (
                       <th colSpan={11} className="bbp-seasonhead-summarycell">
                         <div className="bbp-seasonhead-grid">
@@ -1555,7 +1570,12 @@ function TablePane({
                 const halves = [g.ss, g.fw].filter(Boolean);
                 return (
                   <React.Fragment key={g.year}>
-                    {gi > 0 && <th className="bbp-yearspacer" aria-hidden="true"></th>}
+                    {gi > 0 && (
+                      <>
+                        <th className="bbp-yearspacer" aria-hidden="true"></th>
+                        <th className="bbp-yearstart-spacer" aria-hidden="true"></th>
+                      </>
+                    )}
                     {halves.map(({ season }) => {
                       const meta = seasonYoyMeta(season);
                       const s = (key, label, extraClass = "", refFn) => (
@@ -1616,7 +1636,12 @@ function TablePane({
                   const halves = [g.ss, g.fw].filter(Boolean);
                   return (
                     <React.Fragment key={g.year}>
-                      {gi > 0 && <td className="bbp-yearspacer" aria-hidden="true"></td>}
+                      {gi > 0 && (
+                        <>
+                          <td className="bbp-yearspacer" aria-hidden="true"></td>
+                          <td className="bbp-yearstart-spacer" aria-hidden="true"></td>
+                        </>
+                      )}
                       {halves.map(({ season, data, byBrand }) => {
                         const raw = byBrand.get(brand.id);
                         if (!raw) return <React.Fragment key={season.id} />;
@@ -1701,7 +1726,12 @@ function TablePane({
                 const halves = [g.ss, g.fw].filter(Boolean);
                 return (
                   <React.Fragment key={g.year}>
-                    {gi > 0 && <td className="bbp-yearspacer" aria-hidden="true"></td>}
+                    {gi > 0 && (
+                      <>
+                        <td className="bbp-yearspacer" aria-hidden="true"></td>
+                        <td className="bbp-yearstart-spacer" aria-hidden="true"></td>
+                      </>
+                    )}
                     {halves.map(({ season, data }) => {
                       return (
                         <React.Fragment key={season.id}>
@@ -2040,6 +2070,19 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
     setView("form");
   };
 
+  // Same as startEdit, but leaves editingId null so submitOrder treats it as
+  // a brand-new order (fresh id, appended rather than overwriting) - nothing
+  // is written to `orders` until the user actually saves, so the original
+  // order is untouched unless/until they do.
+  const duplicateOrder = async (order) => {
+    setLoadingEditId(order.id);
+    const images = await loadOrderImages(order.id);
+    setEditingId(null);
+    setForm({ ...blankOrderForm(), ...order, ...images });
+    setLoadingEditId(null);
+    setView("form");
+  };
+
   const handleBrandChange = (brandId) => {
     const brand = brandMap[brandId];
     const currency = brand ? brand.currency : form.currency;
@@ -2108,10 +2151,21 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
     });
   };
 
-  const visibleOrders = useMemo(
-    () => orders.filter((o) => !filterBrandId || o.brandId === filterBrandId),
-    [orders, filterBrandId]
-  );
+  // Brand -> Model# -> Color, so same-model color variants always land next
+  // to each other regardless of registration order (previously this was
+  // unsorted - just insertion order, i.e. whatever order they were saved in).
+  const visibleOrders = useMemo(() => {
+    const filtered = orders.filter((o) => !filterBrandId || o.brandId === filterBrandId);
+    return [...filtered].sort((a, b) => {
+      const brandA = brandMap[a.brandId]?.name || "";
+      const brandB = brandMap[b.brandId]?.name || "";
+      if (brandA !== brandB) return brandA.localeCompare(brandB);
+      const modelA = a.model || "";
+      const modelB = b.model || "";
+      if (modelA !== modelB) return modelA.localeCompare(modelB);
+      return (a.color || "").localeCompare(b.color || "");
+    });
+  }, [orders, filterBrandId, brandMap]);
 
   const sizeList = getOrderSizeList(form, sizeSystems);
 
@@ -2905,6 +2959,9 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                   <div className="bbp-orderrowactions">
                     <button className="bbp-iconbtn" onClick={() => startEdit(o)} disabled={loadingEditId === o.id}>
                       {loadingEditId === o.id ? "Loading…" : "Edit"}
+                    </button>
+                    <button className="bbp-iconbtn" onClick={() => duplicateOrder(o)} disabled={loadingEditId === o.id}>
+                      Copy
                     </button>
                     <button className="bbp-iconbtn" onClick={() => deleteOrder(o.id)}>Delete</button>
                   </div>
@@ -3758,6 +3815,22 @@ function Style() {
         width: 16px; min-width: 16px; max-width: 16px;
         padding: 0 !important; border: none !important; background: var(--surface) !important;
       }
+      /* A second real column, right after the white spacer, marks where the
+         year block actually starts. Tried this as a per-cell box-shadow
+         first - it looked jagged, breaking at every row's horizontal rule
+         instead of reading as one continuous line, and vanished entirely on
+         the black header (box-shadow on a black-background cell is
+         invisible against its own fill). A solid-filled column has neither
+         problem: adjacent cells' backgrounds just abut with no seam, and
+         staying black in every row (header included) needs no color-flip
+         logic - it merges invisibly into the header's own black fill there,
+         and reads as a solid black bar against the white data rows, so the
+         white spacer -> black bar -> season data sequence is unbroken top
+         to bottom regardless of what's behind it. */
+      .bbp-yearstart-spacer {
+        width: 3px; min-width: 3px; max-width: 3px;
+        padding: 0 !important; border: none !important; background: #000000 !important;
+      }
       .bbp-td-right { text-align: right; }
       .bbp-table { border-collapse: collapse; width: auto; font-size: 12px; }
       .bbp-table th, .bbp-table td {
@@ -3874,7 +3947,8 @@ function Style() {
         box-shadow: inset 0 2px 0 0 #000000, inset 0 -2px 0 0 #000000;
       }
       .bbp-table--purchaseplan tbody tr:has(.bbp-td-brand:hover) td.bbp-td-brand,
-      .bbp-table--purchaseplan tbody tr:has(.bbp-td-brand:hover) td.bbp-td-currency {
+      .bbp-table--purchaseplan tbody tr:has(.bbp-td-brand:hover) td.bbp-td-currency,
+      .bbp-table--purchaseplan tbody tr:has(.bbp-td-brand:hover) td.bbp-yearstart-spacer {
         box-shadow: inset 0 2px 0 0 var(--bg), inset 0 -2px 0 0 var(--bg) !important;
       }
 
