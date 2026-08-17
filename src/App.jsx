@@ -2606,7 +2606,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
 
   if (view === "form") {
     return (
-      <div className="bbp-pane">
+      <div className="bbp-pane bbp-orderformpane">
         <header className="bbp-pane-head">
           <div>
             <div className="bbp-eyebrow">Orders</div>
@@ -2616,6 +2616,16 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
             <button className="bbp-btn bbp-btn--ghost" onClick={() => setView("list")}>← Back to List</button>
           </div>
         </header>
+
+        {/* Mobile only (see .bbp-ordpricebar CSS) - pins the key computed
+            totals to the bottom of the viewport so they stay visible while
+            filling in fields further up the form, instead of only being
+            reachable by scrolling down to the Pricing section. */}
+        <div className="bbp-ordpricebar">
+          <div className="bbp-ordpricebar-item"><span>RP</span><strong>¥{fmtJPY(totals.rp)}</strong></div>
+          <div className="bbp-ordpricebar-item"><span>Mark Up</span><strong>{totals.markup ? `${totals.markup.toFixed(2)}x` : "—"}</strong></div>
+          <div className="bbp-ordpricebar-item"><span>TTL ERP</span><strong>¥{fmtJPY(totals.erp)}</strong></div>
+        </div>
 
         <section className="bbp-ordercard">
           <h3>Brand &amp; Season</h3>
@@ -2697,22 +2707,22 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
           <div className="bbp-ordergrid bbp-ordergrid--4">
             <div className="bbp-field">
               <label>WSP ({form.currency})</label>
-              <input type="number" className="bbp-textinput" value={form.wsp} placeholder="0" onChange={(e) => setForm((f) => ({ ...f, wsp: e.target.value }))} />
+              <input type="number" inputMode="decimal" className="bbp-textinput" value={form.wsp} placeholder="0" onChange={(e) => setForm((f) => ({ ...f, wsp: e.target.value }))} />
             </div>
             <div className="bbp-field">
               <label>Exchange Rate (¥ per {form.currency})</label>
               <input
-                type="number" className="bbp-textinput" value={form.exrate} disabled={form.currency === "JPY"}
+                type="number" inputMode="decimal" className="bbp-textinput" value={form.exrate} disabled={form.currency === "JPY"}
                 onChange={(e) => setForm((f) => ({ ...f, exrate: e.target.value }))}
               />
             </div>
             <div className="bbp-field">
               <label>IPC (%)</label>
-              <input type="number" className="bbp-textinput" value={form.afipcPct} onChange={(e) => setForm((f) => ({ ...f, afipcPct: e.target.value }))} />
+              <input type="number" inputMode="decimal" className="bbp-textinput" value={form.afipcPct} onChange={(e) => setForm((f) => ({ ...f, afipcPct: e.target.value }))} />
             </div>
             <div className="bbp-field">
               <label>Cost Ratio (%)</label>
-              <input type="number" className="bbp-textinput" value={form.costPct} onChange={(e) => setForm((f) => ({ ...f, costPct: e.target.value }))} />
+              <input type="number" inputMode="decimal" className="bbp-textinput" value={form.costPct} onChange={(e) => setForm((f) => ({ ...f, costPct: e.target.value }))} />
             </div>
           </div>
           <div className="bbp-ordergrid bbp-ordergrid--4" style={{ marginTop: 14 }}>
@@ -2744,7 +2754,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
             {sizeList.map((s) => (
               <div className="bbp-sizecell" key={s}>
                 <label>{s}</label>
-                <input type="number" min="0" value={form.sizes[s] ?? ""} placeholder="0" onChange={(e) => setSize(s, e.target.value)} />
+                <input type="number" inputMode="numeric" min="0" value={form.sizes[s] ?? ""} placeholder="0" onChange={(e) => setSize(s, e.target.value)} />
               </div>
             ))}
             <div className="bbp-sizetotal">Total: {totals.totalUnits}</div>
@@ -4105,6 +4115,13 @@ function Style() {
       }
       .bbp-sizetotal { font-family: var(--font-mono); font-size: 12px; padding: 6px 12px; border: 1px solid var(--line); }
       .bbp-orderactions { display: flex; gap: 10px; margin-top: 4px; margin-bottom: 40px; }
+      /* Hidden on desktop - the Pricing section's own computed row is
+         already always in view there. Shown fixed-to-viewport on mobile
+         only, see the media query below. */
+      .bbp-ordpricebar { display: none; }
+      .bbp-ordpricebar-item { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 1; }
+      .bbp-ordpricebar-item span { font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.75; }
+      .bbp-ordpricebar-item strong { font-family: var(--font-mono); font-size: 13px; font-weight: 600; }
       .bbp-orderrowactions { display: flex; gap: 8px; }
       .bbp-iconbtn {
         font-family: var(--font-sans); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
@@ -4275,15 +4292,44 @@ function Style() {
         .bbp-pane-head { flex-direction: column; align-items: flex-start; }
         .bbp-headctrls { flex-wrap: wrap; width: 100%; gap: 10px; }
 
-        .bbp-ordergrid--2, .bbp-ordergrid--3, .bbp-ordergrid--4 { grid-template-columns: 1fr; }
-        .bbp-field--span2 { grid-column: span 1; }
-        .bbp-withimg { grid-template-columns: 1fr; }
-        .bbp-imgzone { aspect-ratio: 16/9; }
-        .bbp-ordercard { padding: 16px; }
-        .bbp-orderactions { flex-direction: column; }
-        .bbp-orderactions .bbp-btn { width: 100%; }
-        .bbp-sizerow { gap: 8px; }
-        .bbp-sizecell input { width: 40px; }
+        /* Orders list view: keep the exact desktop card layout/min-width
+           instead of squeezing it down - squeezing was making brand/color
+           text wrap one word per line. A fixed min-width plus horizontal
+           scroll on the list keeps every card exactly as wide (and as
+           readable) as on desktop; the viewport's own pinch-zoom (nothing
+           in this app's viewport meta restricts it) still works normally
+           since nothing here sets touch-action or a fixed zoom level.
+           Excludes .bbp-ordlcard--compact, the separate PDF-export preview
+           list, which is deliberately narrow. */
+        .bbp-ordlist { overflow-x: auto; }
+        .bbp-ordlist .bbp-ordlcard:not(.bbp-ordlcard--compact) { min-width: 720px; }
+
+        /* Orders form (New/Edit Order) only - scoped through
+           .bbp-orderformpane so this doesn't change any other tab's mobile
+           forms. Every field already reachable, none hidden/collapsed;
+           this is purely about making them comfortable to use with a
+           finger: 16px+ text so iOS Safari doesn't auto-zoom on focus
+           (auto-zoom is what actually made pinch-zoom feel broken here -
+           the OS was zooming and re-zooming on its own every time a field
+           was tapped), and larger tap targets throughout. */
+        .bbp-orderformpane .bbp-ordergrid--2,
+        .bbp-orderformpane .bbp-ordergrid--3,
+        .bbp-orderformpane .bbp-ordergrid--4 { grid-template-columns: 1fr; }
+        .bbp-orderformpane .bbp-field--span2 { grid-column: span 1; }
+        .bbp-orderformpane .bbp-withimg { grid-template-columns: 1fr; }
+        .bbp-orderformpane .bbp-imgzone { aspect-ratio: 16/9; }
+        .bbp-orderformpane .bbp-imgzone-remove { width: 32px; height: 32px; font-size: 16px; }
+        .bbp-orderformpane .bbp-ordercard { padding: 16px; }
+        .bbp-orderformpane .bbp-orderactions { flex-direction: column; margin-bottom: 68px; }
+        .bbp-orderformpane .bbp-orderactions .bbp-btn { width: 100%; padding: 15px; font-size: 12px; }
+        .bbp-orderformpane .bbp-select,
+        .bbp-orderformpane .bbp-textinput,
+        .bbp-orderformpane .bbp-textarea {
+          font-size: 16px; padding: 12px 14px; width: 100%; box-sizing: border-box;
+        }
+        .bbp-orderformpane .bbp-sizerow { gap: 10px; }
+        .bbp-orderformpane .bbp-sizecell input { width: 48px; font-size: 16px; padding: 10px 4px; }
+        .bbp-ordpricebar { display: flex; }
 
         .bbp-mastersection-head { flex-wrap: wrap; gap: 10px; }
         .bbp-masterrow { flex-wrap: wrap; }
