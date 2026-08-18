@@ -386,6 +386,27 @@ function sortSeasons(list) {
   return [...list].sort((a, b) => seasonOrderValue(a) - seasonOrderValue(b));
 }
 
+// Shared by both the Orders list and the PDF/print export, so the two never
+// drift apart again. NFKC folds full-width alphanumerics/punctuation to
+// their half-width equivalents (e.g. "ＥＶ１２" -> "EV12") in addition to
+// the usual case/whitespace normalization, so notation differences in the
+// model# don't split what's really the same style into separate spots.
+function normalizeForSort(str) {
+  return (str || "").trim().normalize("NFKC").toLowerCase();
+}
+
+// Brand -> Model# -> Color, so same-model color variants always land next
+// to each other regardless of registration order.
+function compareOrdersForDisplay(a, b, brandMap) {
+  const brandA = brandMap[a.brandId]?.name || "";
+  const brandB = brandMap[b.brandId]?.name || "";
+  if (brandA !== brandB) return brandA.localeCompare(brandB);
+  const modelA = normalizeForSort(a.model);
+  const modelB = normalizeForSort(b.model);
+  if (modelA !== modelB) return modelA.localeCompare(modelB);
+  return normalizeForSort(a.color).localeCompare(normalizeForSort(b.color));
+}
+
 function seedMasters() {
   return {
     currencies: DEFAULT_CURRENCIES,
@@ -1959,10 +1980,25 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
     setView("list");
   };
 
-  const exportOrders = useMemo(
-    () => orders.filter((o) => o.brandId === exportBrandId && o.seasonId === exportSeasonId),
-    [orders, exportBrandId, exportSeasonId]
-  );
+  const brandMap = useMemo(() => {
+    const m = {};
+    masters.brands.forEach((b) => (m[b.id] = b));
+    return m;
+  }, [masters.brands]);
+  const seasonMap = useMemo(() => {
+    const m = {};
+    sortedSeasons.forEach((s) => (m[s.id] = s));
+    return m;
+  }, [sortedSeasons]);
+
+  // Same Brand -> Model# -> Color ordering as the list view (see
+  // compareOrdersForDisplay) - previously separate/unsorted, which is why
+  // the PDF/print export could show color variants of the same model in a
+  // different order (or split apart entirely) from the on-screen list.
+  const exportOrders = useMemo(() => {
+    const filtered = orders.filter((o) => o.brandId === exportBrandId && o.seasonId === exportSeasonId);
+    return [...filtered].sort((a, b) => compareOrdersForDisplay(a, b, brandMap));
+  }, [orders, exportBrandId, exportSeasonId, brandMap]);
   const [exportImages, setExportImages] = useState({});
   useEffect(() => {
     let cancelled = false;
@@ -2030,16 +2066,6 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
     return poNextRev;
   };
 
-  const brandMap = useMemo(() => {
-    const m = {};
-    masters.brands.forEach((b) => (m[b.id] = b));
-    return m;
-  }, [masters.brands]);
-  const seasonMap = useMemo(() => {
-    const m = {};
-    sortedSeasons.forEach((s) => (m[s.id] = s));
-    return m;
-  }, [sortedSeasons]);
 
   const startNew = () => {
     setEditingId(null);
@@ -2151,20 +2177,12 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
     });
   };
 
-  // Brand -> Model# -> Color, so same-model color variants always land next
-  // to each other regardless of registration order (previously this was
-  // unsorted - just insertion order, i.e. whatever order they were saved in).
+  // Same Brand -> Model# -> Color ordering used everywhere orders are
+  // listed (see compareOrdersForDisplay) - previously this was unsorted,
+  // just insertion order, i.e. whatever order they were saved in.
   const visibleOrders = useMemo(() => {
     const filtered = orders.filter((o) => !filterBrandId || o.brandId === filterBrandId);
-    return [...filtered].sort((a, b) => {
-      const brandA = brandMap[a.brandId]?.name || "";
-      const brandB = brandMap[b.brandId]?.name || "";
-      if (brandA !== brandB) return brandA.localeCompare(brandB);
-      const modelA = a.model || "";
-      const modelB = b.model || "";
-      if (modelA !== modelB) return modelA.localeCompare(modelB);
-      return (a.color || "").localeCompare(b.color || "");
-    });
+    return [...filtered].sort((a, b) => compareOrdersForDisplay(a, b, brandMap));
   }, [orders, filterBrandId, brandMap]);
 
   const sizeList = getOrderSizeList(form, sizeSystems);
