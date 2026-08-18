@@ -407,6 +407,20 @@ function compareOrdersForDisplay(a, b, brandMap) {
   return normalizeForSort(a.color).localeCompare(normalizeForSort(b.color));
 }
 
+// For brand-picker dropdowns: like normalizeForSort, but periods and
+// whitespace are stripped entirely (not just trimmed/collapsed) - so
+// notation variants of what's really the same brand name (e.g.
+// "Geoffrey B Small" vs "Geoffrey B. Small") sort next to each other
+// instead of being split apart by punctuation the user never asked to be
+// sorted on. This only ever feeds a comparator, never what's displayed -
+// the brand's own `name` is still shown as-is in every option.
+function normalizeBrandForSort(name) {
+  return (name || "").normalize("NFKC").toLowerCase().replace(/[.\s]+/g, "");
+}
+function compareBrandsForDisplay(a, b) {
+  return normalizeBrandForSort(a.name).localeCompare(normalizeBrandForSort(b.name));
+}
+
 function seedMasters() {
   return {
     currencies: DEFAULT_CURRENCIES,
@@ -1991,6 +2005,31 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
     return m;
   }, [sortedSeasons]);
 
+  // ABC order (case/punctuation/full-width-insensitive - see
+  // compareBrandsForDisplay), shared by every brand-picker dropdown in this
+  // pane so they're all consistent instead of each showing registration
+  // order. Only the list filter and the New/Edit Order form additionally
+  // drop inactive brands (per Purchase Plan's "Edit brands" show/hide) - the
+  // export and bulk-import pickers intentionally keep showing every brand,
+  // since a brand can be deactivated mid-season while its past POs/import
+  // template still need to stay reachable.
+  const sortedBrands = useMemo(
+    () => [...masters.brands].sort(compareBrandsForDisplay),
+    [masters.brands]
+  );
+  // The order form keeps whatever brand the order already has selected even
+  // if it's since been hidden - otherwise editing (or duplicating) an order
+  // for a now-inactive brand would leave its own Brand field with no
+  // matching option to show.
+  const brandFormOptions = useMemo(
+    () => sortedBrands.filter((b) => b.active || b.id === form.brandId),
+    [sortedBrands, form.brandId]
+  );
+  const brandFilterOptions = useMemo(
+    () => sortedBrands.filter((b) => b.active || b.id === filterBrandId),
+    [sortedBrands, filterBrandId]
+  );
+
   // Same Brand -> Model# -> Color ordering as the list view (see
   // compareOrdersForDisplay) - previously separate/unsorted, which is why
   // the PDF/print export could show color variants of the same model in a
@@ -2284,7 +2323,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
             <div className="bbp-field">
               <label>Brand</label>
               <select className="bbp-select" value={exportBrandId} onChange={(e) => setExportBrandId(e.target.value)}>
-                {masters.brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                {sortedBrands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
             <div className="bbp-field">
@@ -2553,7 +2592,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
                 onChange={(e) => { setBulkBrandId(e.target.value); setBulkParsedRows([]); setBulkFileName(""); }}
               >
                 <option value="">— Select Brand —</option>
-                {masters.brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                {sortedBrands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
             <div className="bbp-field">
@@ -2651,7 +2690,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
             <div className="bbp-field">
               <label>Brand</label>
               <select className="bbp-select" value={form.brandId} onChange={(e) => handleBrandChange(e.target.value)}>
-                {masters.brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                {brandFormOptions.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
             <div className="bbp-field">
@@ -2824,7 +2863,7 @@ function OrdersPane({ masters, sortedSeasons, orders, setOrders, seasonId, setSe
         <div className="bbp-headctrls">
           <select className="bbp-select" value={filterBrandId} onChange={(e) => setFilterBrandId(e.target.value)}>
             <option value="">All Brands</option>
-            {masters.brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            {brandFilterOptions.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
           <button
             className="bbp-btn bbp-btn--ghost"
@@ -3345,6 +3384,13 @@ function MastersPane({
   const itemTypes = masters.itemTypes || ITEM_TYPES;
   const sizeSystems = masters.sizeSystems || DEFAULT_SIZE_SYSTEMS;
   const importTemplates = masters.importTemplates || DEFAULT_IMPORT_TEMPLATES;
+  // ABC order for the template picker, same rule as every other brand
+  // dropdown (see compareBrandsForDisplay) - shows every brand regardless of
+  // active, since a template for a now-hidden brand may still be in use.
+  const sortedBrands = useMemo(
+    () => [...masters.brands].sort(compareBrandsForDisplay),
+    [masters.brands]
+  );
   return (
     <div className="bbp-pane">
       <header className="bbp-pane-head">
@@ -3486,7 +3532,7 @@ function MastersPane({
                     onChange={(e) => updateImportTemplate(tpl.id, { brandId: e.target.value })}
                   >
                     <option value="">— Select Brand —</option>
-                    {masters.brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                    {sortedBrands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
                 </div>
                 <button className="bbp-btn bbp-btn--ghost" onClick={() => removeImportTemplate(tpl.id)}>Delete</button>
